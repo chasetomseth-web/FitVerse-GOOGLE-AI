@@ -1,26 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useFirebase } from '../components/FirebaseProvider';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, query, where, orderBy, limit, onSnapshot, getDocs } from 'firebase/firestore';
-import { 
-  ChevronLeft,
-  Search, 
-  Filter, 
-  ChevronRight, 
-  Dumbbell, 
-  Zap, 
-  Clock, 
-  Play, 
-  Info, 
-  X,
-  BookOpen,
-  Volume2,
-  VolumeX,
-  RefreshCw,
-  TrendingUp,
-  AlertTriangle
-} from 'lucide-react';
+import { useSupabase } from '../components/SupabaseProvider';
+import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
+import { ChevronLeft, Search, ListFilter as Filter, ChevronRight, Dumbbell, Zap, Clock, Play, Info, X, BookOpen, Volume2, VolumeX, RefreshCw, TrendingUp, TriangleAlert as AlertTriangle } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { ExerciseLibraryEntry, WorkoutSession } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -39,7 +21,7 @@ import { useUserProfile } from '../hooks/useUserProfile';
 import { ExerciseMedia } from '../components/ExerciseMedia';
 
 export const Library: React.FC = () => {
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const navigate = useNavigate();
   const { profile } = useUserProfile();
   const [exercises, setExercises] = useState<ExerciseLibraryEntry[]>([]);
@@ -128,17 +110,54 @@ export const Library: React.FC = () => {
   const categories = ['All', 'Primary Lift', 'Secondary Lift', 'Accessory', 'Isolation', 'Core', 'Conditioning', 'Mobility', 'Activation'];
 
   useEffect(() => {
-    const q = query(collection(db, 'exercise_library'), limit(500));
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as ExerciseLibraryEntry));
-      setExercises(data);
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'exercise_library');
-      setLoading(false);
-    });
+    const fetchExercises = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('exercise_library')
+          .select('*')
+          .limit(500);
 
-    return () => unsubscribe();
+        if (error) throw error;
+
+        if (data) {
+          // Convert snake_case to camelCase
+          const normalizedData = data.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            description: d.description,
+            videoUrl: d.video_url,
+            movementPattern: d.movement_pattern,
+            primaryMuscleGroup: d.primary_muscle_group,
+            secondaryMuscleGroups: d.secondary_muscle_groups,
+            equipment: d.equipment,
+            category: d.category,
+            difficulty: d.difficulty,
+            instructions: d.instructions || [],
+            commonFormErrors: d.common_form_errors || [],
+            substitutionTiers: d.substitution_tiers,
+            videoKey: d.video_key
+          }));
+          setExercises(normalizedData as ExerciseLibraryEntry[]);
+        }
+        setLoading(false);
+      } catch (error) {
+        handleSupabaseError(error, OperationType.LIST, 'exercise_library');
+        setLoading(false);
+      }
+    };
+
+    fetchExercises();
+
+    const channel = supabase
+      .channel('exercise_library')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'exercise_library' }, () => {
+        fetchExercises();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const filteredExercises = exercises.filter(ex => {
@@ -159,21 +178,24 @@ export const Library: React.FC = () => {
     if (selectedExercise && user) {
       const fetchHistory = async () => {
         try {
-          // Fetch last 5 sessions where this exercise was logged
-          const q = query(
-            collection(db, 'users', user.uid, 'workout_sessions'),
-            where('status', '==', 'completed'),
-            orderBy('date', 'desc'),
-            limit(20) // Scan last 20 sessions to find this exercise
-          );
-          const snap = await getDocs(q);
+          // Fetch last 20 completed sessions
+          const { data, error } = await supabase
+            .from('workout_sessions')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('status', 'completed')
+            .order('date', { ascending: false })
+            .limit(20);
+
+          if (error) throw error;
+
           const history: { date: string; weight: number }[] = [];
-          
-          snap.docs.forEach(doc => {
-            const session = doc.data() as WorkoutSession;
-            const ex = session.exercises.find(e => e.exerciseName === selectedExercise.name);
-            if (ex && ex.sets.length > 0) {
-              const maxWeight = Math.max(...ex.sets.map(s => s.actualWeight || 0));
+
+          (data || []).forEach((session: any) => {
+            const exercises = session.exercises || [];
+            const ex = exercises.find((e: any) => e.exerciseName === selectedExercise.name || e.exercise_name === selectedExercise.name);
+            if (ex && ex.sets && ex.sets.length > 0) {
+              const maxWeight = Math.max(...ex.sets.map((s: any) => s.actualWeight || s.actual_weight || 0));
               if (maxWeight > 0) {
                 history.push({
                   date: session.date,

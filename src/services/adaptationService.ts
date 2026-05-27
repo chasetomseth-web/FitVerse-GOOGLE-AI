@@ -1,13 +1,13 @@
 import { callGemini } from "./gemini";
-import { 
-  UserProfile, 
-  TrainingProgram, 
-  WorkoutSession, 
+import {
+  UserProfile,
+  TrainingProgram,
+  WorkoutSession,
   DailyLog,
   ProgramWeek
 } from "../types";
-import { db, handleFirestoreError, OperationType } from "../firebase";
-import { collection, query, where, getDocs, doc, setDoc, limit, orderBy } from "firebase/firestore";
+import { db } from "../lib/db";
+import { handleSupabaseError, OperationType, supabase } from "../lib/supabase";
 import { subDays, format, startOfDay } from "date-fns";
 
 const EXERCISE_LIBRARY_LIST = `
@@ -483,38 +483,45 @@ export const adaptProgramForNextWeek = async (
   program: TrainingProgram
 ): Promise<AdaptationResult | null> => {
   const model = "gemini-1.5-flash";
-  
+
   try {
     // 1. Gather Data
-    const last7Days = Array.from({ length: 7 }).map((_, i) => 
+    const last7Days = Array.from({ length: 7 }).map((_, i) =>
       format(subDays(new Date(), i), 'yyyy-MM-dd')
     );
 
     // Fetch last week's sessions
-    const sessionsRef = collection(db, 'users', profile.uid, 'workout_sessions');
-    const sessionsQuery = query(
-      sessionsRef,
-      where('date', '>=', last7Days[6]),
-      where('status', '==', 'completed'),
-      orderBy('date', 'desc')
-    );
-    const sessionsSnap = await getDocs(sessionsQuery);
-    const lastWeekSessions = sessionsSnap.docs.map(d => d.data() as WorkoutSession);
+    const { data: sessionsData, error: sessionsError } = await supabase
+      .from('workout_sessions')
+      .select('*')
+      .eq('user_id', profile.uid)
+      .gte('date', last7Days[6])
+      .eq('status', 'completed')
+      .order('date', { ascending: false });
+
+    if (sessionsError) throw sessionsError;
+    const lastWeekSessions = (sessionsData || []).map(d => ({ ...d }) as WorkoutSession);
 
     // Fetch last week's logs (for fatigue indicators)
-    const logsRef = collection(db, 'users', profile.uid, 'daily_logs');
-    const logsQuery = query(
-      logsRef,
-      where('date', '>=', last7Days[6]),
-      orderBy('date', 'desc')
-    );
-    const logsSnap = await getDocs(logsQuery);
-    const lastWeekLogs = logsSnap.docs.map(d => d.data() as DailyLog);
+    const { data: logsData, error: logsError } = await supabase
+      .from('daily_logs')
+      .select('*')
+      .eq('user_id', profile.uid)
+      .gte('date', last7Days[6])
+      .order('date', { ascending: false });
+
+    if (logsError) throw logsError;
+    const lastWeekLogs = (logsData || []).map(d => ({
+      ...d,
+      sleepHours: (d as any).sleep_hours,
+      stressLevel: (d as any).stress_level,
+      sorenessLevel: (d as any).soreness_level
+    }) as DailyLog);
 
     // Get upcoming week's workouts
     const nextWeekNum = program.currentWeek + 1;
     const nextWeekData = program.weeks?.find(w => w.weekNumber === nextWeekNum);
-    
+
     if (!nextWeekData) {
       console.warn("No upcoming week found to adapt.");
       return null;
@@ -523,7 +530,7 @@ export const adaptProgramForNextWeek = async (
     // 2. Construct Prompt
     const prompt = `
 MASTER SYSTEM PROMPT — ELITE PERFORMANCE COACH & NUTRITIONIST
-You are a world-class performance coach, strength specialist, and nutritionist. 
+You are a world-class performance coach, strength specialist, and nutritionist.
 Your goal is to adjust the athlete's training program for the UPCOMING week based on their performance, adherence, and recovery data from the PREVIOUS week.
 
 OBJECTIVE:
@@ -600,9 +607,9 @@ Return valid JSON. Each updated workout MUST follow the 3-block structure (Warmu
                 sessionFocus: { type: "STRING" },
                 sessionType: { type: "STRING" },
                 description: { type: "STRING" },
-                blocks: { 
-                  type: "ARRAY", 
-                  items: { 
+                blocks: {
+                  type: "ARRAY",
+                  items: {
                     type: "OBJECT",
                     properties: {
                       type: { type: "STRING" },
@@ -663,7 +670,7 @@ Return valid JSON. Each updated workout MUST follow the 3-block structure (Warmu
       }))
     }));
 
-    // 4. Update Program in Firestore
+    // 4. Update Program in Supabase
     const updatedWeeks = program.weeks?.map(w => {
       if (w.weekNumber === nextWeekNum) {
         return {
@@ -674,12 +681,15 @@ Return valid JSON. Each updated workout MUST follow the 3-block structure (Warmu
       return w;
     });
 
-    const programRef = doc(db, 'users', profile.uid, 'training_programs', program.programId);
-    await setDoc(programRef, { weeks: updatedWeeks }, { merge: true });
+    const { error: updateError } = await supabase
+      .from('training_programs')
+      .update({ weeks: updatedWeeks })
+      .eq('id', program.programId);
+
+    if (updateError) throw updateError;
 
     // 5. Save Adaptation Summary for UI
-    const adaptationRef = doc(collection(db, 'users', profile.uid, 'weekly_adaptations'), `week_${nextWeekNum}`);
-    await setDoc(adaptationRef, {
+    await db.createWeeklyAdaptation(profile.uid, {
       week: nextWeekNum,
       programId: program.programId,
       date: new Date().toISOString(),

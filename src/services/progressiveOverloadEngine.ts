@@ -1,6 +1,6 @@
 import { WorkoutSession, StrengthBaselines, WorkoutExercise } from '../types';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../lib/db';
+import { handleSupabaseError, OperationType, supabase } from '../lib/supabase';
 
 /**
  * Progressive Overload Engine Service
@@ -25,7 +25,7 @@ export const evaluateProgressiveOverload = (
     // 2. Analyze performance
     const allSetsCompleted = currentEx.sets.every((s) => s.completedAt);
     const avgRPE = currentEx.sets.reduce((sum, s) => sum + s.rpe, 0) / currentEx.sets.length;
-    
+
     // Check for missed reps (comparing actualReps to target reps)
     // If actualReps is missing, assume they hit the target
     const setsWithMissedReps = currentEx.sets.filter(
@@ -61,7 +61,7 @@ export const evaluateProgressiveOverload = (
 };
 
 /**
- * Writes updated baselines to Firestore.
+ * Writes updated baselines to Supabase.
  */
 export const updateStrengthBaselines = async (
   uid: string,
@@ -80,12 +80,9 @@ export const updateStrengthBaselines = async (
 
     if (Object.keys(cleanBaselines).length === 0) return;
 
-    const userRef = doc(db, 'users', uid);
-    await setDoc(userRef, {
-      strengthBaselines: cleanBaselines
-    }, { merge: true });
+    await db.updateUser(uid, { strengthBaselines: cleanBaselines });
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `users/${uid}`);
+    handleSupabaseError(error, OperationType.WRITE, `users/${uid}`);
   }
 };
 

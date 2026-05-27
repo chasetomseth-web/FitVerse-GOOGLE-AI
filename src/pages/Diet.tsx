@@ -1,20 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useFirebase } from '../components/FirebaseProvider';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { doc, setDoc, collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { 
-  ChevronLeft,
-  Utensils, 
-  Plus, 
-  Droplets, 
-  Sparkles,
-  X,
-  TrendingUp,
-  Search,
-  Loader2,
-  Camera
-} from 'lucide-react';
+import { useSupabase } from '../components/SupabaseProvider';
+import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
+import { ChevronLeft, Utensils, Plus, Droplets, Sparkles, X, TrendingUp, Search, Loader as Loader2, Camera } from 'lucide-react';
 import { DailyLog, MealEntry, BodyMetric } from '../types';
 import { format, startOfDay } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
@@ -53,7 +41,7 @@ type UnifiedFoodResult = {
 };
 
 export const Diet: React.FC = () => {
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const navigate = useNavigate();
   const { profile } = useUserProfile();
   const { log: todayLog, loading: logLoading, setLog } = useDailyLog();
@@ -87,23 +75,44 @@ export const Diet: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
-    const metricsRef = collection(db, 'users', user.uid, 'body_metrics');
-    const q = query(metricsRef, orderBy('date', 'desc'), limit(7));
+    const fetchMetrics = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('body_metrics')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('date', { ascending: false })
+          .limit(7);
 
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const history = snap.docs.map(doc => {
-        const data = doc.data() as BodyMetric;
-        return {
-          date: format(new Date(data.date), 'MM/dd'),
-          weight: Math.round(data.weightKg * weightFactor)
-        };
-      }).reverse();
-      setWeightHistory(history);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `users/${user.uid}/body_metrics`);
-    });
+        if (error) throw error;
 
-    return () => unsubscribe();
+        if (data) {
+          const history = data.map((d: any) => {
+            return {
+              date: format(new Date(d.date), 'MM/dd'),
+              weight: Math.round(d.weight_kg * weightFactor)
+            };
+          }).reverse();
+          setWeightHistory(history);
+        }
+      } catch (error) {
+        handleSupabaseError(error, OperationType.GET, 'body_metrics');
+      }
+    };
+
+    fetchMetrics();
+
+    // Subscribe to changes
+    const channel = supabase
+      .channel(`body_metrics:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'body_metrics', filter: `user_id=eq.${user.id}` }, () => {
+        fetchMetrics();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user, weightFactor]);
 
   const nutritionTargets = {

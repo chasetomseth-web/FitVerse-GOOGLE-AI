@@ -1,31 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useFirebase } from '../components/FirebaseProvider';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, query, where, orderBy, limit, onSnapshot, doc, getDocs } from 'firebase/firestore';
-import { 
-  ChevronLeft,
-  TrendingUp, 
-  ChevronRight,
-  Dumbbell,
-  Zap,
-  Clock,
-  BarChart2,
-  Calendar,
-  Flame,
-  Target,
-  Award,
-  Activity,
-  CheckCircle2,
-  Circle,
-  ArrowUpRight,
-  ArrowDownRight,
-  Info,
-  X,
-  Trophy,
-  History,
-  LayoutGrid
-} from 'lucide-react';
+import { useSupabase } from '../components/SupabaseProvider';
+import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
+import { ChevronLeft, TrendingUp, ChevronRight, Dumbbell, Zap, Clock, ChartBar as BarChart2, Calendar, Flame, Target, Award, Activity, CircleCheck as CheckCircle2, Circle, ArrowUpRight, ArrowDownRight, Info, X, Trophy, History, LayoutGrid } from 'lucide-react';
 import { DailyLog, WorkoutSession, BodyMetric, Achievement, DailyWorkoutState } from '../types';
 import { 
   format, 
@@ -72,7 +49,7 @@ import { ensureDailyWorkoutState, swapWorkoutStates } from '../services/workoutS
 import { useToast } from '../components/ui/Toast';
 
 export const Progress: React.FC = () => {
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const navigate = useNavigate();
   const { profile } = useUserProfile();
   const { activeProgram } = useActiveProgram();
@@ -123,79 +100,127 @@ export const Progress: React.FC = () => {
     if (!user) return;
     setLoading(true);
 
-    // Recovery Trend (Last 28 days + buffer for heatmap)
-    const readinessQuery = query(
-      collection(db, 'users', user.uid, 'daily_logs'),
-      orderBy('date', 'desc'),
-      limit(90)
-    );
+    const fetchData = async () => {
+      try {
+        // Recovery Trend (Last 28 days + buffer for heatmap)
+        const { data: readinessData, error: readinessError } = await supabase
+          .from('daily_logs')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('date', { ascending: false })
+          .limit(90);
 
-    // Training Volume (Last 8 sessions or 12 weeks for heatmap)
-    const workoutsQuery = query(
-      collection(db, 'users', user.uid, 'workout_sessions'),
-      where('status', '==', 'completed'),
-      orderBy('date', 'desc'),
-      limit(100)
-    );
+        if (readinessError) throw readinessError;
+        setReadinessLogs((readinessData || []).map(d => ({ id: d.id, ...d } as DailyLog)).reverse());
 
-    // Weight Trend (Last 30 metrics from subcollection)
-    const weightQuery = query(
-      collection(db, 'users', user.uid, 'body_metrics'),
-      orderBy('date', 'desc'),
-      limit(30)
-    );
+        // Training Volume (Last 8 sessions or 12 weeks for heatmap)
+        const { data: workoutsData, error: workoutsError } = await supabase
+          .from('workout_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'completed')
+          .order('date', { ascending: false })
+          .limit(100);
 
-    // Achievements (from subcollection)
-    const achievementsQuery = query(
-      collection(db, 'users', user.uid, 'achievements'),
-      orderBy('earnedAt', 'desc')
-    );
+        if (workoutsError) throw workoutsError;
+        setRecentWorkouts((workoutsData || []).map(d => ({ id: d.id, ...d } as WorkoutSession)));
 
-    // Adaptation Logs
-    const adaptationsQuery = query(
-      collection(db, 'users', user.uid, 'weekly_adaptations'),
-      orderBy('date', 'desc')
-    );
+        // Weight Trend (Last 30 metrics from subcollection)
+        const { data: weightData, error: weightError } = await supabase
+          .from('body_metrics')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('date', { ascending: false })
+          .limit(30);
 
-    const unsubReadiness = onSnapshot(readinessQuery, (snap) => {
-      setReadinessLogs(snap.docs.map(d => ({ id: d.id, ...d.data() } as DailyLog)).reverse());
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/daily_logs`));
+        if (weightError) throw weightError;
+        setWeightLogs((weightData || []).map(d => ({ id: d.id, ...d } as BodyMetric)).reverse());
 
-    const unsubWorkouts = onSnapshot(workoutsQuery, (snap) => {
-      setRecentWorkouts(snap.docs.map(d => ({ id: d.id, ...d.data() } as WorkoutSession)));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/workout_sessions`));
+        // Achievements (from subcollection)
+        const { data: achievementsData, error: achievementsError } = await supabase
+          .from('achievements')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('earned_at', { ascending: false });
 
-    const unsubWeight = onSnapshot(weightQuery, (snap) => {
-      setWeightLogs(snap.docs.map(d => ({ id: d.id, ...d.data() } as BodyMetric)).reverse());
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/body_metrics`));
+        if (achievementsError) throw achievementsError;
+        setAchievements((achievementsData || []).map(d => ({
+          id: d.id,
+          achievementId: (d as any).achievement_id,
+          name: d.name,
+          description: d.description,
+          earnedAt: (d as any).earned_at,
+          userId: (d as any).user_id
+        } as Achievement)));
+        setLoading(false);
 
-    const unsubAchievements = onSnapshot(achievementsQuery, (snap) => {
-      setAchievements(snap.docs.map(d => ({ id: d.id, ...d.data() } as Achievement)));
-      setLoading(false);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/achievements`));
+        // Adaptation Logs
+        const { data: adaptationsData, error: adaptationsError } = await supabase
+          .from('weekly_adaptations')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('date', { ascending: false });
 
-    const unsubAdaptations = onSnapshot(adaptationsQuery, (snap) => {
-      setAdaptationLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/weekly_adaptations`));
+        if (adaptationsError) throw adaptationsError;
+        setAdaptationLogs(adaptationsData || []);
 
-    // Fetch Daily Workout States for heatmap
-    const heatmapStart = startOfWeek(subWeeks(new Date(), 11), { weekStartsOn: 1 });
-    const statesQuery = query(
-      collection(db, 'users', user.uid, 'daily_workout_states'),
-      where('date', '>=', format(heatmapStart, 'yyyy-MM-dd'))
-    );
+        // Fetch Daily Workout States for heatmap
+        const heatmapStart = startOfWeek(subWeeks(new Date(), 11), { weekStartsOn: 1 });
 
-    const unsubStates = onSnapshot(statesQuery, (snap) => {
-      setWorkoutStates(snap.docs.map(d => d.data() as DailyWorkoutState));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/daily_workout_states`));
+        const { data: statesData, error: statesError } = await supabase
+          .from('daily_workout_states')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('date', format(heatmapStart, 'yyyy-MM-dd'));
+
+        if (statesError) throw statesError;
+        setWorkoutStates(statesData || []);
+      } catch (err) {
+        handleSupabaseError(err, OperationType.LIST, 'multiple tables');
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+
+    // Subscribe to real-time updates
+    const readinessChannel = supabase
+      .channel(`daily_logs:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_logs', filter: `user_id=eq.${user.id}` }, fetchData)
+      .subscribe();
+
+    const workoutsChannel = supabase
+      .channel(`workout_sessions_progress:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workout_sessions', filter: `user_id=eq.${user.id}` }, fetchData)
+      .subscribe();
+
+    const weightChannel = supabase
+      .channel(`body_metrics:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'body_metrics', filter: `user_id=eq.${user.id}` }, fetchData)
+      .subscribe();
+
+    const achievementsChannel = supabase
+      .channel(`achievements:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'achievements', filter: `user_id=eq.${user.id}` }, fetchData)
+      .subscribe();
+
+    const adaptationsChannel = supabase
+      .channel(`weekly_adaptations:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_adaptations', filter: `user_id=eq.${user.id}` }, fetchData)
+      .subscribe();
+
+    const statesChannel = supabase
+      .channel(`daily_workout_states_progress:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_workout_states', filter: `user_id=eq.${user.id}` }, fetchData)
+      .subscribe();
 
     return () => {
-      unsubReadiness();
-      unsubWorkouts();
-      unsubWeight();
-      unsubAchievements();
-      unsubAdaptations();
-      unsubStates();
+      supabase.removeChannel(readinessChannel);
+      supabase.removeChannel(workoutsChannel);
+      supabase.removeChannel(weightChannel);
+      supabase.removeChannel(achievementsChannel);
+      supabase.removeChannel(adaptationsChannel);
+      supabase.removeChannel(statesChannel);
     };
   }, [user]);
 

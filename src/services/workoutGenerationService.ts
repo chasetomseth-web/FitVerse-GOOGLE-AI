@@ -1,15 +1,15 @@
 import { callGemini } from "./gemini";
-import { 
-  UserProfile, 
-  TrainingProgram, 
-  WorkoutSession, 
+import {
+  UserProfile,
+  TrainingProgram,
+  WorkoutSession,
   ExerciseLibraryEntry,
   WorkoutBlock,
   WorkoutExercise,
   WorkoutSet
 } from '../types';
-import { db } from '../firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../lib/db';
+import { supabase } from '../lib/supabase';
 
 const EXERCISE_LIBRARY_LIST = `
 1 or 2 foot supported chin up isometric,
@@ -491,7 +491,7 @@ export async function generateWorkout(params: GenerationParams): Promise<Workout
 
   const systemInstruction = `
 MASTER SYSTEM PROMPT — ELITE PERFORMANCE COACH & NUTRITIONIST
-You are a world-class performance coach, strength specialist, and nutritionist. 
+You are a world-class performance coach, strength specialist, and nutritionist.
 Your goal is to provide finalized, adaptive training and nutrition for TODAY based on the athlete's current readiness, program phase, and goals.
 
 OBJECTIVE:
@@ -625,13 +625,13 @@ STRICT: RETURN JSON ONLY.
         plannedDuration: data.finalized_duration_minutes || 60,
         readinessAtSession: data.readiness_score || 70,
         adjustmentsMade: {
-          volumeChange: 0, 
+          volumeChange: 0,
           intensityRPE: 0,
           restModifier: 1.0,
           reason: (data.adjustments_applied || []).join('. ')
         },
         blocks: (data.blocks || []).map((b: any) => ({
-          type: b.block_type?.toLowerCase().includes('strength') ? 'strength' : 
+          type: b.block_type?.toLowerCase().includes('strength') ? 'strength' :
                 b.block_type?.toLowerCase().includes('superset') ? 'superset' : 'circuit',
           displayMode: b.display_mode as any,
           circuitType: b.format as any,

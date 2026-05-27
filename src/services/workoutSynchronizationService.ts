@@ -1,5 +1,5 @@
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { doc, getDoc, setDoc, writeBatch, collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
+import { db } from '../lib/db';
+import { handleSupabaseError, OperationType, supabase } from '../lib/supabase';
 import { DailyWorkoutState, TrainingProgram, DailyLog } from '../types';
 import { format, startOfDay, differenceInDays, subDays } from 'date-fns';
 
@@ -9,19 +9,19 @@ import { format, startOfDay, differenceInDays, subDays } from 'date-fns';
  */
 export const ensureDailyWorkoutState = async (uid: string, date: Date, activeProgram: TrainingProgram | null): Promise<DailyWorkoutState | null> => {
   const dateStr = format(date, 'yyyy-MM-dd');
-  const stateRef = doc(db, 'users', uid, 'daily_workout_states', dateStr);
-  
+
   try {
-    const snap = await getDoc(stateRef);
-    if (snap.exists()) {
-      const existingState = snap.data() as DailyWorkoutState;
+    const existingState = await db.getDailyWorkoutState(uid, dateStr);
+
+    if (existingState) {
+      const typedState = existingState as DailyWorkoutState;
       // If the state belongs to the current active program, return it
-      if (activeProgram && existingState.programId === activeProgram.id) {
-        return existingState;
+      if (activeProgram && typedState.programId === activeProgram.id) {
+        return typedState;
       }
       // If it's a completed workout from a previous program, keep it
-      if (existingState.status === 'completed') {
-        return existingState;
+      if (typedState.status === 'completed') {
+        return typedState;
       }
       // Otherwise, we'll fall through and re-generate it for the new program
     }
@@ -30,14 +30,20 @@ export const ensureDailyWorkoutState = async (uid: string, date: Date, activePro
 
     // --- READINESS ADAPTIVE ENGINE ---
     // User Request: Only include rest day if readiness score is continuously dropping.
-    const logsQuery = query(
-      collection(db, 'users', uid, 'daily_logs'),
-      orderBy('date', 'desc'),
-      limit(4)
-    );
-    const logsSnap = await getDocs(logsQuery);
-    const recentLogs = logsSnap.docs.map(d => d.data() as DailyLog);
-    
+    const { data: logsData, error: logsError } = await supabase
+      .from('daily_logs')
+      .select('*')
+      .eq('user_id', uid)
+      .order('date', { ascending: false })
+      .limit(4);
+
+    if (logsError) throw logsError;
+
+    const recentLogs = (logsData || []).map(d => ({
+      ...d,
+      readinessScore: (d as any).readiness_score
+    })) as DailyLog[];
+
     let forcedRest = false;
     let restReason = "";
 
@@ -59,14 +65,14 @@ export const ensureDailyWorkoutState = async (uid: string, date: Date, activePro
     const startDate = new Date(activeProgram.startDate);
     const diffDays = differenceInDays(startOfDay(date), startOfDay(startDate));
     const weekNum = Math.floor(diffDays / 7) + 1;
-    
+
     // Find program phase/week info
     const phase = activeProgram.phases?.find(p => weekNum >= p.weekStart && weekNum <= p.weekEnd);
     const weekData = activeProgram.weeks?.find(w => w.weekNumber === weekNum);
-    
+
     // Robust matching for session
-    let session = weekData?.sessions.find(s => 
-      s.dayName === dayName || 
+    let session = weekData?.sessions.find(s =>
+      s.dayName === dayName ||
       s.dayName.toLowerCase() === dayName.toLowerCase() ||
       s.dayName.toLowerCase().startsWith(dayName.toLowerCase().substring(0, 3))
     );
@@ -74,17 +80,17 @@ export const ensureDailyWorkoutState = async (uid: string, date: Date, activePro
     if (!session && weekData) {
       // Try by day number if AI provided it
       session = weekData.sessions.find(s => (s as any).day === parseInt(dayOfWeek));
-      
+
       // Fallback: If weeklySchedule has a workout for this day, try to find a session by index or cycle
       const dayConfig = activeProgram.weeklySchedule?.[dayOfWeek];
       const isTrainingDay = dayConfig && dayConfig.sessionType.toLowerCase() !== 'rest';
-      
+
       if (!session && isTrainingDay && weekData.sessions.length > 0) {
         const trainingDays = Object.keys(activeProgram.weeklySchedule)
           .filter(k => activeProgram.weeklySchedule[k].sessionType.toLowerCase() !== 'rest')
           .map(Number)
           .sort((a, b) => a - b);
-          
+
         const trainingDayIndex = trainingDays.indexOf(parseInt(dayOfWeek));
         // Cycle through available sessions if we have fewer than training days
         const sessionIndex = trainingDayIndex % weekData.sessions.length;
@@ -93,23 +99,23 @@ export const ensureDailyWorkoutState = async (uid: string, date: Date, activePro
         }
       }
     }
-    
+
     let dayConfig = activeProgram.weeklySchedule?.[dayOfWeek];
 
     // Fallback: if weeklySchedule is empty, try to find a session for this dayName in ANY week
     if (!dayConfig || Object.keys(activeProgram.weeklySchedule).length === 0) {
-      const anyWeekSession = activeProgram.weeks?.find(w => 
-        w.sessions.some(s => 
-          s.dayName === dayName || 
+      const anyWeekSession = activeProgram.weeks?.find(w =>
+        w.sessions.some(s =>
+          s.dayName === dayName ||
           s.dayName.toLowerCase() === dayName.toLowerCase() ||
           s.dayName.toLowerCase().startsWith(dayName.toLowerCase().substring(0, 3))
         )
-      )?.sessions.find(s => 
-        s.dayName === dayName || 
+      )?.sessions.find(s =>
+        s.dayName === dayName ||
         s.dayName.toLowerCase() === dayName.toLowerCase() ||
         s.dayName.toLowerCase().startsWith(dayName.toLowerCase().substring(0, 3))
       );
-      
+
       if (anyWeekSession) {
         dayConfig = {
           sessionFocus: anyWeekSession.sessionFocus,
@@ -139,10 +145,23 @@ export const ensureDailyWorkoutState = async (uid: string, date: Date, activePro
       readinessScoreAtCheckin: recentLogs[0]?.readinessScore
     };
 
-    await setDoc(stateRef, newState);
+    await db.upsertDailyWorkoutState(uid, dateStr, {
+      programPhase: newState.programPhase,
+      programDayType: newState.programDayType,
+      workoutTitle: newState.workoutTitle,
+      workoutFocus: newState.workoutFocus,
+      workoutDuration: newState.workoutDuration,
+      targetIntensity: newState.targetIntensity,
+      status: newState.status,
+      programId: newState.programId,
+      programWeek: newState.programWeek,
+      swappable: newState.swappable,
+      readinessScoreAtCheckin: newState.readinessScoreAtCheckin
+    });
+
     return newState;
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `users/${uid}/daily_workout_states/${dateStr}`);
+    handleSupabaseError(error, OperationType.WRITE, `users/${uid}/daily_workout_states/${dateStr}`);
     return null;
   }
 };
@@ -160,8 +179,6 @@ export const swapWorkoutStates = async (uid: string, date1: Date, date2: Date, a
     const state2 = await ensureDailyWorkoutState(uid, date2, activeProgram);
 
     if (!state1 || !state2) return false;
-
-    const batch = writeBatch(db);
 
     // Swap fields but keep the original ID and Date
     const newState1: DailyWorkoutState = {
@@ -192,13 +209,36 @@ export const swapWorkoutStates = async (uid: string, date1: Date, date2: Date, a
       programWeek: state1.programWeek,
     };
 
-    batch.set(doc(db, 'users', uid, 'daily_workout_states', date1Str), newState1);
-    batch.set(doc(db, 'users', uid, 'daily_workout_states', date2Str), newState2);
+    // Update both states in Supabase
+    await db.upsertDailyWorkoutState(uid, date1Str, {
+      programPhase: newState1.programPhase,
+      programDayType: newState1.programDayType,
+      workoutTitle: newState1.workoutTitle,
+      workoutFocus: newState1.workoutFocus,
+      workoutDuration: newState1.workoutDuration,
+      targetIntensity: newState1.targetIntensity,
+      exerciseBlocks: newState1.exerciseBlocks,
+      status: newState1.status,
+      programId: newState1.programId,
+      programWeek: newState1.programWeek,
+    });
 
-    await batch.commit();
+    await db.upsertDailyWorkoutState(uid, date2Str, {
+      programPhase: newState2.programPhase,
+      programDayType: newState2.programDayType,
+      workoutTitle: newState2.workoutTitle,
+      workoutFocus: newState2.workoutFocus,
+      workoutDuration: newState2.workoutDuration,
+      targetIntensity: newState2.targetIntensity,
+      exerciseBlocks: newState2.exerciseBlocks,
+      status: newState2.status,
+      programId: newState2.programId,
+      programWeek: newState2.programWeek,
+    });
+
     return true;
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, `users/${uid}/daily_workout_states/swap`);
+    handleSupabaseError(error, OperationType.WRITE, `users/${uid}/daily_workout_states/swap`);
     return false;
   }
 };

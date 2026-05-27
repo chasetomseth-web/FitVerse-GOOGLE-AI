@@ -1,29 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useFirebase } from '../components/FirebaseProvider';
-import { db } from '../firebase';
-import { collection, doc, addDoc, getDoc, setDoc, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
-import { 
-  Play, 
-  Pause, 
-  CheckCircle2, 
-  Clock, 
-  Zap, 
-  X,
-  ArrowRight,
-  ArrowUpRight,
-  Award,
-  Trophy,
-  Dumbbell,
-  Home,
-  ZapOff,
-  Smile,
-  Meh,
-  Frown,
-  Battery,
-  Timer,
-  Star
-} from 'lucide-react';
+import { useSupabase } from '../components/SupabaseProvider';
+import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
+import { Play, Pause, CircleCheck as CheckCircle2, Clock, Zap, X, ArrowRight, ArrowUpRight, Award, Trophy, Dumbbell, Hop as Home, ZapOff, Smile, Meh, Frown, Battery, Timer, Star } from 'lucide-react';
 import { WorkoutSession, TrainingProgram, Achievement } from '../types';
 import { format, subDays } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
@@ -39,7 +18,7 @@ import { useToast } from '../components/ui/Toast';
 import { ExerciseMedia } from '../components/ExerciseMedia';
 
 export const WorkoutPlayer: React.FC = () => {
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const { profile, updateProfile } = useUserProfile();
   const { activeProgram, loading: programLoading } = useActiveProgram();
   const { log: todayLog, loading: logLoading, setLog } = useDailyLog();
@@ -132,34 +111,46 @@ export const WorkoutPlayer: React.FC = () => {
 
       try {
         if (sessionIdParam) {
-          const docRef = doc(db, 'users', user.uid, 'workout_sessions', sessionIdParam);
-          const docSnap = await getDoc(docRef);
-          
-          if (docSnap.exists()) {
-            const data = docSnap.data() as WorkoutSession;
-            if (data.status === 'assigned' || data.status === 'in-progress') {
-              setSession(sanitizeSession({ id: docSnap.id, ...data }));
+          const { data, error } = await supabase
+            .from('workout_sessions')
+            .select('*')
+            .eq('id', sessionIdParam)
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (error) throw error;
+
+          if (data) {
+            const sessionData = data as any;
+            if (sessionData.status === 'assigned' || sessionData.status === 'in-progress') {
+              setSession(sanitizeSession({ id: data.id, ...sessionData }));
               setShowSummary(true);
             }
           }
         } else {
           // Check today's daily_workout_state
           const todayStr = format(new Date(), 'yyyy-MM-dd');
-          const stateRef = doc(db, 'users', user.uid, 'daily_workout_states', todayStr);
-          const stateSnap = await getDoc(stateRef);
-          
-          if (stateSnap.exists()) {
-            const stateData = stateSnap.data();
-            if (stateData.exerciseBlocks && stateData.exerciseBlocks.length > 0) {
+          const { data: stateData, error: stateError } = await supabase
+            .from('daily_workout_states')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('date', todayStr)
+            .maybeSingle();
+
+          if (stateError) throw stateError;
+
+          if (stateData) {
+            const state = stateData as any;
+            if (state.exercise_blocks && state.exercise_blocks.length > 0) {
               // Create a temporary session object from the state
               const tempSession: WorkoutSession = {
                 sessionId: `sess_${Date.now()}`,
-                uid: user.uid,
+                uid: user.id,
                 date: todayStr,
-                programId: stateData.programId,
-                programWeek: stateData.programWeek,
-                sessionFocus: stateData.workoutFocus,
-                plannedDuration: stateData.workoutDuration,
+                programId: state.program_id,
+                programWeek: state.program_week,
+                sessionFocus: state.workout_focus,
+                plannedDuration: state.workout_duration,
                 readinessAtSession: todayLog?.readinessScore || 70,
                 adjustmentsMade: {
                   volumeChange: 0,
@@ -167,8 +158,8 @@ export const WorkoutPlayer: React.FC = () => {
                   restModifier: 1.0,
                   reason: 'Generated via Adaptive Engine'
                 },
-                blocks: stateData.exerciseBlocks,
-                exercises: stateData.exerciseBlocks.flatMap((b: any) => b.exercises),
+                blocks: state.exercise_blocks,
+                exercises: state.exercise_blocks.flatMap((b: any) => b.exercises),
                 achievementsUnlocked: [],
                 status: 'in-progress',
                 notes: ''
@@ -241,13 +232,30 @@ export const WorkoutPlayer: React.FC = () => {
         todayLog || undefined
       );
 
-      const docRef = await addDoc(collection(db, 'users', user.uid, 'workout_sessions'), {
-        ...newSession,
-        status: 'in-progress',
-        startTime: new Date().toISOString()
-      });
-      
-      setSession(sanitizeSession({ id: docRef.id, ...newSession }));
+      const { data: insertedSession, error: insertError } = await supabase
+        .from('workout_sessions')
+        .insert({
+          user_id: user.id,
+          date: format(new Date(), 'yyyy-MM-dd'),
+          program_id: newSession.programId,
+          program_week: newSession.programWeek,
+          session_focus: newSession.sessionFocus,
+          planned_duration: newSession.plannedDuration,
+          readiness_at_session: newSession.readinessAtSession,
+          adjustments_made: newSession.adjustmentsMade,
+          blocks: newSession.blocks,
+          exercises: newSession.exercises || [],
+          achievements_unlocked: [],
+          status: 'in-progress',
+          start_time: new Date().toISOString(),
+          notes: ''
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      setSession(sanitizeSession({ id: insertedSession.id, ...newSession }));
       setShowSummary(true);
     } catch (error) {
       console.error('Error generating session:', error);
@@ -277,14 +285,18 @@ export const WorkoutPlayer: React.FC = () => {
     const updatedSession = { ...session, blocks: updatedBlocks };
     setSession(updatedSession);
 
-    // Save to Firestore
+    // Save to Supabase
     try {
       if (session.id) {
-        const sessionRef = doc(db, 'users', user.uid, 'workout_sessions', session.id);
-        await setDoc(sessionRef, {
-          blocks: updatedBlocks,
-          exercises: updatedBlocks.flatMap(b => b.exercises) // Keep flattened for compatibility
-        }, { merge: true });
+        const { error: updateError } = await supabase
+          .from('workout_sessions')
+          .update({
+            blocks: updatedBlocks,
+            exercises: updatedBlocks.flatMap(b => b.exercises) // Keep flattened for compatibility
+          })
+          .eq('id', session.id);
+
+        if (updateError) throw updateError;
       }
     } catch (error) {
       console.error('Error saving set:', error);
@@ -351,17 +363,24 @@ export const WorkoutPlayer: React.FC = () => {
       // Ensure session has an ID (should be handled by handleStartSession, but safety first)
       let currentSessionId = session.id;
       if (!currentSessionId) {
-        const docRef = await addDoc(collection(db, 'users', user.uid, 'workout_sessions'), {
-          ...session,
-          status: 'in-progress',
-          startTime: new Date().toISOString()
-        });
-        currentSessionId = docRef.id;
+        const { data: insertedSession, error: insertError } = await supabase
+          .from('workout_sessions')
+          .insert({
+            user_id: user.id,
+            date: format(new Date(), 'yyyy-MM-dd'),
+            status: 'in-progress',
+            start_time: new Date().toISOString(),
+            blocks: session.blocks,
+            exercises: session.exercises || []
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+        currentSessionId = insertedSession.id;
         setSession({ ...session, id: currentSessionId });
       }
 
-      const sessionRef = doc(db, 'users', user.uid, 'workout_sessions', currentSessionId);
-      
       // 1. Update session status
       const completedSession: WorkoutSession = {
         ...session,
@@ -373,30 +392,22 @@ export const WorkoutPlayer: React.FC = () => {
         notes: feedback.notes,
       };
 
-      await setDoc(sessionRef, {
-        status: 'completed',
-        endTime: completedSession.endTime,
-        actualDuration: completedSession.actualDuration,
-        overallRPE: completedSession.overallRPE,
-        notes: completedSession.notes,
-        exercises: session.exercises
-      }, { merge: true });
+      const { error: updateError } = await supabase
+        .from('workout_sessions')
+        .update({
+          status: 'completed',
+          end_time: completedSession.endTime,
+          actual_duration: completedSession.actualDuration,
+          overall_rpe: completedSession.overallRPE,
+          notes: completedSession.notes,
+          exercises: session.exercises
+        })
+        .eq('id', currentSessionId);
 
-      // 2. Save detailed performance for each exercise
-      for (const block of session.blocks || []) {
-        for (const ex of block.exercises) {
-          const perfRef = doc(collection(sessionRef, 'performance'));
-          await setDoc(perfRef, {
-            uid: user.uid,
-            sessionId: session.id,
-            exerciseId: ex.exerciseId || ex.exerciseName.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-            exerciseName: ex.exerciseName,
-            sets: ex.sets,
-            completedAt: new Date().toISOString(),
-            circuitRounds: block.type === 'circuit' ? circuitRounds : null
-          });
-        }
-      }
+      if (updateError) throw updateError;
+
+      // 2. Save detailed performance for each exercise (skip - we keep this in blocks/exercises)
+      // Note: Supabase doesn't have subcollections, performance data is stored in blocks
       
       // 3. Update daily log
       await setLog({
@@ -404,22 +415,24 @@ export const WorkoutPlayer: React.FC = () => {
       });
 
       // 3. Progressive Overload Logic
-      const prevQ = query(
-        collection(db, 'users', user.uid, 'workout_sessions'),
-        where('programId', '==', session.programId),
-        where('sessionFocus', '==', session.sessionFocus),
-        where('status', '==', 'completed'),
-        orderBy('date', 'desc'),
-        limit(2)
-      );
-      
-      const prevSnap = await getDocs(prevQ);
+      const { data: prevSessions, error: prevError } = await supabase
+        .from('workout_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('program_id', session.programId)
+        .eq('session_focus', session.sessionFocus)
+        .eq('status', 'completed')
+        .order('date', { ascending: false })
+        .limit(2);
+
+      if (prevError) throw prevError;
+
       let previousSession: WorkoutSession | null = null;
-      
-      if (prevSnap.docs.length > 1) {
-        const otherDoc = prevSnap.docs.find(d => d.id !== session.id);
-        if (otherDoc) {
-          previousSession = { id: otherDoc.id, ...otherDoc.data() } as WorkoutSession;
+
+      if (prevSessions && prevSessions.length > 1) {
+        const otherSession = prevSessions.find((s: any) => s.id !== session.id);
+        if (otherSession) {
+          previousSession = { id: otherSession.id, ...otherSession } as WorkoutSession;
         }
       }
 
@@ -433,17 +446,17 @@ export const WorkoutPlayer: React.FC = () => {
         const todayStr = format(new Date(), 'yyyy-MM-dd');
         const yesterday = subDays(new Date(), 1);
         const yesterdayStr = format(yesterday, 'yyyy-MM-dd');
-        
+
         let newStreak = (profile.currentStreak || 0);
-        
+
         if (profile.lastWorkoutDate === yesterdayStr) {
           newStreak += 1;
         } else if (profile.lastWorkoutDate !== todayStr) {
           // If they missed yesterday, it resets to 1 (for today's workout)
           newStreak = 1;
         }
-        
-        await updateProfile({ 
+
+        await updateProfile({
           currentStreak: newStreak,
           lastWorkoutDate: todayStr
         });
@@ -538,23 +551,43 @@ export const WorkoutPlayer: React.FC = () => {
 
   const handleStartSession = async () => {
     if (!session || !user) return;
-    
+
     if (!session.id) {
       // It's a temp session from daily_workout_states, save it first
       setGenerating(true);
       try {
-        const docRef = await addDoc(collection(db, 'users', user.uid, 'workout_sessions'), {
-          ...session,
-          status: 'in-progress',
-          startTime: new Date().toISOString()
-        });
-        
+        const { data: insertedSession, error: insertError } = await supabase
+          .from('workout_sessions')
+          .insert({
+            user_id: user.id,
+            date: format(new Date(), 'yyyy-MM-dd'),
+            program_id: session.programId,
+            program_week: session.programWeek,
+            session_focus: session.sessionFocus,
+            planned_duration: session.plannedDuration,
+            readiness_at_session: session.readinessAtSession,
+            adjustments_made: session.adjustmentsMade,
+            blocks: session.blocks,
+            exercises: session.exercises || [],
+            achievements_unlocked: [],
+            status: 'in-progress',
+            start_time: new Date().toISOString(),
+            notes: ''
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
         // Update daily_workout_state to in-progress
         const todayStr = format(new Date(), 'yyyy-MM-dd');
-        const stateRef = doc(db, 'users', user.uid, 'daily_workout_states', todayStr);
-        await setDoc(stateRef, { status: 'in-progress', sessionId: docRef.id }, { merge: true });
-        
-        setSession({ ...session, id: docRef.id });
+        await supabase
+          .from('daily_workout_states')
+          .update({ status: 'in-progress', session_id: insertedSession.id })
+          .eq('user_id', user.id)
+          .eq('date', todayStr);
+
+        setSession({ ...session, id: insertedSession.id });
       } catch (error) {
         console.error('Error starting session:', error);
         toast('Failed to start session', 'error');
@@ -564,7 +597,7 @@ export const WorkoutPlayer: React.FC = () => {
         setGenerating(false);
       }
     }
-    
+
     setShowSummary(false);
   };
 

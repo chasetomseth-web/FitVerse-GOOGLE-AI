@@ -1,16 +1,20 @@
-import { db } from '../firebase';
-import { collection, doc, setDoc, getDoc, getDocs, query, where, writeBatch, limit } from 'firebase/firestore';
+import { db } from '../lib/db';
+import { supabase } from '../lib/supabase';
 import { ExerciseLibraryEntry, MovementPattern, EquipmentType, ExerciseCategory } from '../types';
 import { callGemini } from './gemini';
 
 export async function clearExerciseLibrary() {
   console.log('Clearing exercise library...');
-  const q = query(collection(db, 'exercise_library'), limit(500));
-  const snap = await getDocs(q);
-  const batch = writeBatch(db);
-  snap.docs.forEach(d => batch.delete(d.ref));
-  await batch.commit();
-  console.log('Library cleared.');
+  const { error } = await supabase
+    .from('exercise_library')
+    .delete()
+    .neq('id', 'placeholder'); // Delete all rows
+
+  if (error) {
+    console.error('Error clearing library:', error);
+  } else {
+    console.log('Library cleared.');
+  }
 }
 
 async function enrichExercise(name: string, retryCount = 0): Promise<Partial<ExerciseLibraryEntry>> {
@@ -45,7 +49,7 @@ async function enrichExercise(name: string, retryCount = 0): Promise<Partial<Exe
       }
     };
 
-    const textResponse = await callGemini(`Generate fitness metadata for the exercise: "${name}". 
+    const textResponse = await callGemini(`Generate fitness metadata for the exercise: "${name}".
       Provide:
       1. A concise description.
       2. 3-5 clear step-by-step instructions.
@@ -72,7 +76,7 @@ async function enrichExercise(name: string, retryCount = 0): Promise<Partial<Exe
         return enrichExercise(name, retryCount + 1);
       }
     }
-    
+
     console.error(`Error enriching ${name}:`, error);
     return {};
   }
@@ -527,7 +531,7 @@ const VIDEO_URLS = [
 
 function getMovementPattern(name: string): MovementPattern {
   const n = name.toLowerCase();
-  
+
   if (n.includes('bench press') || n.includes('pushup') || n.includes('push up') || n.includes('floor press') || n.includes('chest press')) return 'Horizontal Push';
   if (n.includes('bent over row') || n.includes('seated row') || n.includes('one arm row') || n.includes('renegade row') || n.includes('inverted row') || n.includes('t-bar row')) return 'Horizontal Pull';
   if (n.includes('strict press') || n.includes('overhead press') || n.includes('ohp') || n.includes('z press') || n.includes('arnold press') || n.includes('shoulder press')) return 'Vertical Push';
@@ -542,7 +546,7 @@ function getMovementPattern(name: string): MovementPattern {
   if (n.includes('run') || n.includes('jog') || n.includes('sprint') || n.includes('walk') || n.includes('shuttle')) return 'Locomotion';
   if (n.includes('jump') || n.includes('power clean') || n.includes('snatch') || n.includes('box jump') || n.includes('slam')) return 'Plyometric';
   if (n.includes('stretch') || n.includes('pose') || n.includes('opener') || n.includes('mobility')) return 'Mobility';
-  
+
   return 'Conditioning';
 }
 
@@ -550,77 +554,77 @@ function getMuscleGroups(name: string): { primary: string; secondary: string[]; 
   const n = name.toLowerCase();
   const groups: Set<string> = new Set();
   let primary = 'Full Body';
-  
+
   // Compound detection
-  const isCompound = n.includes('squat') || n.includes('deadlift') || n.includes('bench press') || 
-                     n.includes('overhead press') || n.includes('row') || n.includes('pull up') || 
+  const isCompound = n.includes('squat') || n.includes('deadlift') || n.includes('bench press') ||
+                     n.includes('overhead press') || n.includes('row') || n.includes('pull up') ||
                      n.includes('dip') || n.includes('lunge') || n.includes('clean') || n.includes('snatch');
 
   // Legs
-  if (n.includes('squat') || n.includes('lunge') || n.includes('leg') || n.includes('deadlift') || 
-      n.includes('rdl') || n.includes('calf') || n.includes('sumo') || n.includes('cossack') || 
-      n.includes('nordic') || n.includes('step up') || n.includes('jump') || n.includes('box') || 
-      n.includes('skater') || n.includes('curtsy') || n.includes('hamstring') || n.includes('quad') || 
-      n.includes('glute') || n.includes('thrust') || n.includes('bridge') || n.includes('clamshell') || 
+  if (n.includes('squat') || n.includes('lunge') || n.includes('leg') || n.includes('deadlift') ||
+      n.includes('rdl') || n.includes('calf') || n.includes('sumo') || n.includes('cossack') ||
+      n.includes('nordic') || n.includes('step up') || n.includes('jump') || n.includes('box') ||
+      n.includes('skater') || n.includes('curtsy') || n.includes('hamstring') || n.includes('quad') ||
+      n.includes('glute') || n.includes('thrust') || n.includes('bridge') || n.includes('clamshell') ||
       n.includes('hinge') || n.includes('good morning')) {
     primary = 'Legs';
     groups.add('Legs');
   }
-  
+
   // Chest
-  if (n.includes('bench') || n.includes('chest') || n.includes('pushup') || n.includes('push up') || 
+  if (n.includes('bench') || n.includes('chest') || n.includes('pushup') || n.includes('push up') ||
       n.includes('dips') || n.includes('fly') || n.includes('pec') || n.includes('floor press')) {
     primary = 'Chest';
     groups.add('Chest');
   }
-  
+
   // Back
-  if (n.includes('row') || n.includes('pull') || n.includes('chin') || n.includes('lat') || 
-      n.includes('back') || n.includes('face-pull') || n.includes('shrug') || n.includes('superman') || 
+  if (n.includes('row') || n.includes('pull') || n.includes('chin') || n.includes('lat') ||
+      n.includes('back') || n.includes('face-pull') || n.includes('shrug') || n.includes('superman') ||
       n.includes('bird dog') || n.includes('pull apart') || n.includes('inverted row')) {
     primary = 'Back';
     groups.add('Back');
   }
-  
+
   // Shoulders
-  if (n.includes('shoulder') || n.includes('lateral raise') || n.includes('arnold') || 
-      n.includes('upright row') || n.includes('snatch') || n.includes('clean') || n.includes('jerk') || 
-      n.includes('press') || n.includes('ohp') || n.includes('z press') || n.includes('face pull') || 
+  if (n.includes('shoulder') || n.includes('lateral raise') || n.includes('arnold') ||
+      n.includes('upright row') || n.includes('snatch') || n.includes('clean') || n.includes('jerk') ||
+      n.includes('press') || n.includes('ohp') || n.includes('z press') || n.includes('face pull') ||
       n.includes('high pull') || n.includes('thruster') || n.includes('wall ball') || n.includes('slam ball') ||
       n.includes('delt') || n.includes('reverse fly')) {
     primary = 'Shoulders';
     groups.add('Shoulders');
   }
-  
+
   // Arms
-  if (n.includes('curl') || n.includes('tricep') || n.includes('skull') || n.includes('bicep') || 
-      n.includes('hammer') || n.includes('kickback') || n.includes('preacher') || n.includes('concentration') || 
+  if (n.includes('curl') || n.includes('tricep') || n.includes('skull') || n.includes('bicep') ||
+      n.includes('hammer') || n.includes('kickback') || n.includes('preacher') || n.includes('concentration') ||
       n.includes('dip') || n.includes('pushup') || n.includes('chin') || n.includes('pull up')) {
     primary = 'Arms';
     groups.add('Arms');
   }
-  
+
   // Core
-  if (n.includes('situp') || n.includes('crunch') || n.includes('plank') || n.includes('hollow') || 
-      n.includes('core') || n.includes('ab') || n.includes('leg raise') || n.includes('deadbug') || 
-      n.includes('russian twist') || n.includes('birddog') || n.includes('v up') || n.includes('v-up') || 
-      n.includes('toe touch') || n.includes('knee raise') || n.includes('flutter') || n.includes('scissor') || 
-      n.includes('bicycle') || n.includes('woodchop') || n.includes('pallof') || n.includes('carry') || 
+  if (n.includes('situp') || n.includes('crunch') || n.includes('plank') || n.includes('hollow') ||
+      n.includes('core') || n.includes('ab') || n.includes('leg raise') || n.includes('deadbug') ||
+      n.includes('russian twist') || n.includes('birddog') || n.includes('v up') || n.includes('v-up') ||
+      n.includes('toe touch') || n.includes('knee raise') || n.includes('flutter') || n.includes('scissor') ||
+      n.includes('bicycle') || n.includes('woodchop') || n.includes('pallof') || n.includes('carry') ||
       n.includes('farmer') || n.includes('waiter') || n.includes('climber') || n.includes('toes to bar') ||
       n.includes('knees to elbows') || n.includes('starfish')) {
     primary = 'Core';
     groups.add('Core');
   }
-  
+
   const allGroups = Array.from(groups);
   const secondary = allGroups.filter(g => g !== primary);
-  
+
   return { primary, secondary, isCompound };
 }
 
 function getEquipment(name: string): EquipmentType {
   const n = name.toLowerCase();
-  
+
   if (n.includes('db') || n.includes('dumbbell')) return 'Dumbbell';
   if (n.includes('bb') || n.includes('barbell')) return 'Barbell';
   if (n.includes('kb') || n.includes('kettlebell')) return 'Kettlebell';
@@ -630,29 +634,28 @@ function getEquipment(name: string): EquipmentType {
   if (n.includes('ball') || n.includes('med ball') || n.includes('slam ball') || n.includes('wall ball') || n.includes('stability ball') || n.includes('swiss ball') || n.includes('bosu')) return 'Medicine Ball';
   if (n.includes('treadmill') || n.includes('bike') || n.includes('ski erg') || n.includes('stairmaster') || n.includes('skierg')) return 'Cardio Machines';
   if (n.includes('sled')) return 'Sled';
-  
+
   return 'Bodyweight';
 }
 
 function getCategory(name: string): ExerciseCategory {
   const n = name.toLowerCase();
   if (n.includes('back squat') || n.includes('deadlift') || n.includes('bench press') || n.includes('overhead press')) return 'Primary Lift';
-  if (n.includes('jump') || n.includes('burpee') || n.includes('slam') || n.includes('shuttle') || 
-      n.includes('sprint') || n.includes('jog') || n.includes('walk') || n.includes('bike') || 
-      n.includes('ski') || n.includes('stairmaster') || n.includes('skierg') || n.includes('rope') || 
-      n.includes('climber') || n.includes('skater') || n.includes('high knees') || n.includes('butt kicks') || 
+  if (n.includes('jump') || n.includes('burpee') || n.includes('slam') || n.includes('shuttle') ||
+      n.includes('sprint') || n.includes('jog') || n.includes('walk') || n.includes('bike') ||
+      n.includes('ski') || n.includes('stairmaster') || n.includes('skierg') || n.includes('rope') ||
+      n.includes('climber') || n.includes('skater') || n.includes('high knees') || n.includes('butt kicks') ||
       n.includes('jack') || n.includes('mountain climber')) return 'Conditioning';
-  if (n.includes('stretch') || n.includes('pose') || n.includes('opener') || n.includes('rotation') || 
+  if (n.includes('stretch') || n.includes('pose') || n.includes('opener') || n.includes('rotation') ||
       n.includes('yoga') || n.includes('mobility') || n.includes('foam roll')) return 'Mobility';
   if (n.includes('situp') || n.includes('crunch') || n.includes('plank') || n.includes('hollow') || n.includes('core')) return 'Core';
-  
+
   return 'Accessory';
 }
 
 export async function seedExerciseLibrary(onProgress?: (progress: number) => void, forceUpdate = false) {
   console.log('Starting exercise library seeding...');
-  const libraryRef = collection(db, 'exercise_library');
-  
+
   const BATCH_SIZE = 2; // Process in very small batches to avoid rate limits
   const DELAY_BETWEEN_BATCHES = 3000; // Increase delay between batches
 
@@ -660,7 +663,7 @@ export async function seedExerciseLibrary(onProgress?: (progress: number) => voi
     const batch = VIDEO_URLS.slice(i, i + BATCH_SIZE);
     const currentProgress = Math.min(100, Math.round((i / VIDEO_URLS.length) * 100));
     if (onProgress) onProgress(currentProgress);
-    
+
     console.log(`Processing batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(VIDEO_URLS.length / BATCH_SIZE)} (${currentProgress}%)`);
 
     const promises = batch.map(async (url) => {
@@ -669,25 +672,25 @@ export async function seedExerciseLibrary(onProgress?: (progress: number) => voi
         // Decode first to ensure we're starting from a clean filename
         const decodedFilename = decodeURIComponent(filename);
         // Clean filename: strip apostrophes and quotes as they are often removed or problematic in GCS
-        const cleanedFilename = decodedFilename.replace(/'/g, '').replace(/"/g, '').replace(/’/g, '').replace(/”/g, '').replace(/“/g, '');
-        
+        const cleanedFilename = decodedFilename.replace(/'/g, '').replace(/"/g, '').replace(/'/g, '').replace(/"/g, '').replace(/"/g, '');
+
         const name = cleanedFilename.replace(/\.(mp4|mov)$/i, '').replace(/%20/g, ' ').trim();
         const id = name.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_');
 
-        const docRef = doc(db, 'exercise_library', id);
-        const existingDoc = await getDoc(docRef);
-        
-        if (existingDoc.exists() && !forceUpdate) {
+        // Check if exercise exists
+        const existingExercise = await db.getExercise(id);
+
+        if (existingExercise && !forceUpdate) {
           return;
         }
 
         let enrichedData: Partial<ExerciseLibraryEntry> = {};
-        if (!existingDoc.exists() || forceUpdate) {
+        if (!existingExercise || forceUpdate) {
           enrichedData = await enrichExercise(name);
         } else {
-          enrichedData = existingDoc.data() as Partial<ExerciseLibraryEntry>;
+          enrichedData = existingExercise as Partial<ExerciseLibraryEntry>;
         }
-        
+
         const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
         // Encode and specifically handle characters that GCS might have issues with
         const encodedFilename = encodeURIComponent(cleanedFilename)
@@ -696,12 +699,12 @@ export async function seedExerciseLibrary(onProgress?: (progress: number) => voi
           .replace(/'/g, '%27')
           .replace(/\*/g, '%2A')
           .replace(/!/g, '%21');
-        
+
         const finalUrl = baseUrl + encodedFilename;
 
         const muscleData = getMuscleGroups(name);
         const movementPattern = getMovementPattern(name);
-        
+
         const entry: ExerciseLibraryEntry = {
           id,
           name: name.charAt(0).toUpperCase() + name.slice(1),
@@ -730,14 +733,35 @@ export async function seedExerciseLibrary(onProgress?: (progress: number) => voi
           ]
         };
 
-        await setDoc(docRef, entry);
+        // Use upsert to create or update
+        const { error } = await supabase
+          .from('exercise_library')
+          .upsert({
+            id: entry.id,
+            name: entry.name,
+            description: entry.description,
+            video_url: entry.videoUrl,
+            movement_pattern: entry.movementPattern,
+            primary_muscle_group: entry.primaryMuscleGroup,
+            secondary_muscle_groups: entry.secondaryMuscleGroups,
+            equipment: entry.equipment,
+            difficulty: entry.difficulty,
+            category: entry.category,
+            substitution_tiers: entry.substitutionTiers,
+            instructions: entry.instructions,
+            common_form_errors: entry.commonFormErrors
+          });
+
+        if (error) {
+          console.error(`Error inserting ${name}:`, error);
+        }
       } catch (error) {
         console.error(`Error processing ${url}:`, error);
       }
     });
 
     await Promise.all(promises);
-    
+
     if (i + BATCH_SIZE < VIDEO_URLS.length) {
       await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
     }
@@ -801,24 +825,31 @@ function getSubstitutionTiers(name: string, pattern: MovementPattern, equipment:
 
 export async function refreshExerciseMetadata(onProgress?: (progress: number) => void) {
   console.log('Refreshing exercise metadata...');
-  const libraryRef = collection(db, 'exercise_library');
-  const snap = await getDocs(libraryRef);
-  const total = snap.docs.length;
-  
+
+  const { data: exercises, error } = await supabase
+    .from('exercise_library')
+    .select('*');
+
+  if (error) {
+    console.error('Error fetching exercises:', error);
+    return;
+  }
+
+  const total = exercises?.length || 0;
+
   for (let i = 0; i < total; i++) {
-    const d = snap.docs[i];
-    const data = d.data() as ExerciseLibraryEntry;
+    const data = exercises![i];
     const name = data.name;
-    
+
     const muscleData = getMuscleGroups(name);
     const movementPattern = getMovementPattern(name);
     const updatedEquipment = getEquipment(name);
     const updatedCategory = getCategory(name);
     const substitutionTiers = getSubstitutionTiers(name, movementPattern, updatedEquipment);
-    
-    const currentUrl = data.videoUrl;
+
+    const currentUrl = data.video_url;
     let updatedUrl = currentUrl;
-    
+
     if (currentUrl) {
       try {
         const baseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
@@ -826,7 +857,7 @@ export async function refreshExerciseMetadata(onProgress?: (progress: number) =>
         // Decode first to ensure we're starting from a clean filename
         const decodedFilename = decodeURIComponent(filename);
         // Clean filename: strip apostrophes and quotes as they are often removed in GCS
-        const cleanedFilename = decodedFilename.replace(/'/g, '').replace(/"/g, '').replace(/’/g, '');
+        const cleanedFilename = decodedFilename.replace(/'/g, '').replace(/"/g, '').replace(/'/g, '');
         // Encode and specifically handle characters that GCS might have issues with or that encodeURIComponent skips
         const encodedFilename = encodeURIComponent(cleanedFilename)
           .replace(/\(/g, '%28')
@@ -839,24 +870,29 @@ export async function refreshExerciseMetadata(onProgress?: (progress: number) =>
         console.error(`Failed to re-encode URL for ${name}:`, e);
       }
     }
-    
+
     const updateData: any = {
-      movementPattern,
-      muscleGroups: [muscleData.primary, ...muscleData.secondary],
-      primaryMuscleGroup: muscleData.primary,
-      secondaryMuscleGroups: muscleData.secondary,
-      isCompound: muscleData.isCompound,
+      movement_pattern: movementPattern,
+      primary_muscle_group: muscleData.primary,
+      secondary_muscle_groups: muscleData.secondary,
       equipment: updatedEquipment,
       category: updatedCategory,
-      substitutionTiers
+      substitution_tiers: substitutionTiers
     };
 
     if (updatedUrl !== undefined) {
-      updateData.videoUrl = updatedUrl;
+      updateData.video_url = updatedUrl;
     }
-    
-    await setDoc(d.ref, updateData, { merge: true });
-    
+
+    const { error: updateError } = await supabase
+      .from('exercise_library')
+      .update(updateData)
+      .eq('id', data.id);
+
+    if (updateError) {
+      console.error(`Error updating ${name}:`, updateError);
+    }
+
     if (onProgress) onProgress(Math.round(((i + 1) / total) * 100));
   }
   console.log('Metadata refresh complete!');

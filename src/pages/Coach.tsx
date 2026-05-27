@@ -1,23 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useFirebase } from '../components/FirebaseProvider';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, query, where, orderBy, limit, onSnapshot, doc, setDoc, addDoc, serverTimestamp, getDoc } from 'firebase/firestore';
-import { 
-  ChevronLeft,
-  Send, 
-  Brain, 
-  Sparkles, 
-  Info, 
-  ChevronRight, 
-  Zap, 
-  Clock, 
-  Dumbbell,
-  AlertCircle,
-  Utensils,
-  TrendingUp,
-  Activity
-} from 'lucide-react';
+import { useSupabase } from '../components/SupabaseProvider';
+import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
+import { ChevronLeft, Send, Brain, Sparkles, Info, ChevronRight, Zap, Clock, Dumbbell, CircleAlert as AlertCircle, Utensils, TrendingUp, Activity } from 'lucide-react';
 import { CoachConversation, CoachMessage, DailyLog, TrainingProgram, WorkoutSession } from '../types';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
@@ -33,7 +18,7 @@ import { useDailyLog } from '../hooks/useDailyLog';
 import { useActiveProgram } from '../hooks/useActiveProgram';
 
 export const Coach: React.FC = () => {
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { profile } = useUserProfile();
@@ -55,80 +40,134 @@ export const Coach: React.FC = () => {
     if (!user) return;
 
     // Fetch weight trend
-    const metricsQuery = query(
-      collection(db, 'users', user.uid, 'body_metrics'),
-      orderBy('date', 'desc'),
-      limit(7)
-    );
+    const fetchWeightTrend = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('body_metrics')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('date', { ascending: false })
+          .limit(7);
 
-    const unsubMetrics = onSnapshot(metricsQuery, (snap) => {
-      if (snap.docs.length >= 2) {
-        const weights = snap.docs.map(d => d.data().weightKg);
-        const latest = weights[0];
-        const previous = weights[weights.length - 1];
-        const diff = latest - previous;
-        if (Math.abs(diff) < 0.5) setWeightTrend('Stable');
-        else if (diff > 0) setWeightTrend('Trending Up');
-        else setWeightTrend('Trending Down');
+        if (error) throw error;
+        if (data && data.length >= 2) {
+          const weights = data.map(d => d.weight_kg);
+          const latest = weights[0];
+          const previous = weights[weights.length - 1];
+          const diff = latest - previous;
+          if (Math.abs(diff) < 0.5) setWeightTrend('Stable');
+          else if (diff > 0) setWeightTrend('Trending Up');
+          else setWeightTrend('Trending Down');
+        }
+      } catch (err) {
+        handleSupabaseError(err, OperationType.LIST, 'body_metrics');
       }
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/body_metrics`));
+    };
+
+    fetchWeightTrend();
+
+    // Subscribe to body_metrics changes
+    const metricsChannel = supabase
+      .channel(`body_metrics:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'body_metrics', filter: `user_id=eq.${user.id}` }, () => {
+        fetchWeightTrend();
+      })
+      .subscribe();
 
     // Fetch today's workout for context
-    const workoutQuery = query(
-      collection(db, 'users', user.uid, 'workout_sessions'),
-      where('date', '==', todayStr),
-      limit(1)
-    );
+    const fetchWorkout = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('workout_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('date', todayStr)
+          .limit(1)
+          .maybeSingle();
 
-    const unsubWorkout = onSnapshot(workoutQuery, (snap) => {
-      if (!snap.empty) {
-        setTodayWorkout({ id: snap.docs[0].id, ...snap.docs[0].data() } as WorkoutSession);
+        if (error) throw error;
+        if (data) {
+          setTodayWorkout({ id: data.id, ...data } as WorkoutSession);
+        }
+      } catch (err) {
+        handleSupabaseError(err, OperationType.LIST, 'workout_sessions');
       }
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/workout_sessions`));
+    };
+
+    fetchWorkout();
+
+    // Subscribe to workout_sessions changes
+    const workoutChannel = supabase
+      .channel(`workout_sessions:${user.id}:${todayStr}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workout_sessions', filter: `user_id=eq.${user.id}` }, (payload) => {
+        const newData = payload.new as any;
+        if (newData && newData.date === todayStr) {
+          setTodayWorkout({ id: newData.id, ...newData } as WorkoutSession);
+        }
+      })
+      .subscribe();
 
     // Load recent conversations for persistent memory
-    const historyQuery = query(
-      collection(db, 'users', user.uid, 'coach_conversations'),
-      orderBy('date', 'desc'),
-      limit(5)
-    );
+    const fetchConversations = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('coach_conversations')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('date', { ascending: false })
+          .limit(5);
 
-    const unsubHistory = onSnapshot(historyQuery, (snap) => {
-      const sortedDocs = [...snap.docs].sort((a, b) => a.data().date.localeCompare(b.data().date));
-      
-      let allMessages: CoachMessage[] = [];
-      let todayFound = false;
-      let todayMessages: CoachMessage[] = [];
+        if (error) throw error;
 
-      sortedDocs.forEach(d => {
-        const data = d.data() as CoachConversation;
-        const msgList = data.messages || [];
-        
-        if (d.id === todayStr) {
-          todayFound = true;
-          todayMessages = msgList;
-        } else {
-          allMessages = [...allMessages, ...msgList];
+        if (data) {
+          const sortedDocs = [...data].sort((a, b) => a.date.localeCompare(b.date));
+
+          let allMessages: CoachMessage[] = [];
+          let todayFound = false;
+          let todayMessages: CoachMessage[] = [];
+
+          sortedDocs.forEach((d: any) => {
+            const msgList = d.messages || [];
+
+            if (d.date === todayStr) {
+              todayFound = true;
+              todayMessages = msgList;
+            } else {
+              allMessages = [...allMessages, ...msgList];
+            }
+          });
+
+          setHistory(allMessages);
+
+          // Only update local messages if we aren't currently waiting for an AI response
+          if (todayFound && !loading) {
+            setMessages(todayMessages);
+          }
+
+          if (!todayFound && !loading && !initialGreetingTriggered.current) {
+            initialGreetingTriggered.current = true;
+            triggerInitialGreeting();
+          }
         }
-      });
-
-      setHistory(allMessages);
-
-      // Only update local messages if we aren't currently waiting for an AI response
-      // or if the incoming list is clearly ahead of our current list
-      if (todayFound && !loading) {
-        setMessages(todayMessages);
+      } catch (err) {
+        handleSupabaseError(err, OperationType.LIST, 'coach_conversations');
       }
+    };
 
-      if (!todayFound && !loading && !initialGreetingTriggered.current) {
-        initialGreetingTriggered.current = true;
-        triggerInitialGreeting();
-      }
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/coach_conversations`));
+    fetchConversations();
+
+    // Subscribe to coach_conversations changes
+    const conversationsChannel = supabase
+      .channel(`coach_conversations:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'coach_conversations', filter: `user_id=eq.${user.id}` }, () => {
+        fetchConversations();
+      })
+      .subscribe();
 
     return () => {
-      unsubWorkout();
-      unsubHistory();
+      supabase.removeChannel(metricsChannel);
+      supabase.removeChannel(workoutChannel);
+      supabase.removeChannel(conversationsChannel);
     };
   }, [user]);
 
@@ -155,11 +194,11 @@ export const Coach: React.FC = () => {
         timestamp: new Date().toISOString()
       };
 
-      await setDoc(doc(db, 'users', user.uid, 'coach_conversations', todayStr), {
-        uid: user.uid,
+      await supabase.from('coach_conversations').upsert({
+        user_id: user.id,
         date: todayStr,
         messages: [modelMessage],
-        createdAt: serverTimestamp()
+        created_at: new Date().toISOString()
       });
     } catch (error) {
       console.error("Greeting Error:", error);
@@ -275,12 +314,12 @@ export const Coach: React.FC = () => {
         });
       }
 
-      await setDoc(doc(db, 'users', user.uid, 'coach_conversations', todayStr), {
-        uid: user.uid,
+      await supabase.from('coach_conversations').upsert({
+        user_id: user.id,
         date: todayStr,
         messages: finalMessages,
-        createdAt: serverTimestamp()
-      }, { merge: true });
+        created_at: new Date().toISOString()
+      });
 
     } catch (error: any) {
       console.error("Coach Error:", error);

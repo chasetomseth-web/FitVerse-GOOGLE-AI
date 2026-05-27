@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { useFirebase } from '../components/FirebaseProvider';
+import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
+import { useSupabase } from '../components/SupabaseProvider';
 import { DailyWorkoutState } from '../types';
 import { format } from 'date-fns';
 
 export const useDailyWorkout = (dateStr?: string) => {
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const [workoutState, setWorkoutState] = useState<DailyWorkoutState | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -19,21 +18,53 @@ export const useDailyWorkout = (dateStr?: string) => {
       return;
     }
 
-    const stateRef = doc(db, 'users', user.uid, 'daily_workout_states', targetDate);
-    
-    const unsubscribe = onSnapshot(stateRef, (snap) => {
-      if (snap.exists()) {
-        setWorkoutState(snap.data() as DailyWorkoutState);
-      } else {
-        setWorkoutState(null);
-      }
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `users/${user.uid}/daily_workout_states/${targetDate}`);
-      setLoading(false);
-    });
+    const fetchWorkout = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('daily_workout_states')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('date', targetDate)
+          .maybeSingle();
 
-    return () => unsubscribe();
+        if (error) throw error;
+        setWorkoutState(data as DailyWorkoutState | null);
+      } catch (error) {
+        handleSupabaseError(error, OperationType.GET, 'daily_workout_states');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchWorkout();
+
+    // Subscribe to changes
+    const channel = supabase
+      .channel(`daily_workout:${user.id}:${targetDate}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'daily_workout_states',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          const newData = payload.new as any;
+          if (newData && newData.date === targetDate) {
+            if (payload.eventType === 'DELETE') {
+              setWorkoutState(null);
+            } else {
+              setWorkoutState(newData as DailyWorkoutState);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user, targetDate]);
 
   return { workoutState, loading };

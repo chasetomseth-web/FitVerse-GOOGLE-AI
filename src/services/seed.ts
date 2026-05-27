@@ -1,14 +1,16 @@
-import { db } from '../firebase';
-import { collection, addDoc, getDocs, query, limit } from 'firebase/firestore';
+import { db } from '../lib/db';
 
 const EXERCISES = [
   {
+    id: 'barbell_bench_press',
     name: 'Barbell Bench Press',
     description: 'The standard chest builder.',
-    muscleGroups: ['Chest', 'Shoulders', 'Arms'],
-    equipment: ['Barbell', 'Bench'],
+    primaryMuscleGroup: 'Chest',
+    secondaryMuscleGroups: ['Shoulders', 'Arms'],
+    equipment: 'Barbell',
     difficulty: 'intermediate',
     category: 'Strength',
+    movementPattern: 'horizontal_push',
     instructions: [
       'Lie on your back on a flat bench.',
       'Grip the bar with hands slightly wider than shoulder-width.',
@@ -17,12 +19,15 @@ const EXERCISES = [
     ]
   },
   {
+    id: 'back_squat',
     name: 'Back Squat',
     description: 'The king of lower body exercises.',
-    muscleGroups: ['Legs', 'Core'],
-    equipment: ['Barbell', 'Rack'],
+    primaryMuscleGroup: 'Legs',
+    secondaryMuscleGroups: ['Core'],
+    equipment: 'Barbell',
     difficulty: 'advanced',
     category: 'Strength',
+    movementPattern: 'squat',
     instructions: [
       'Rest the barbell on your upper back.',
       'Stand with feet shoulder-width apart.',
@@ -31,12 +36,15 @@ const EXERCISES = [
     ]
   },
   {
+    id: 'deadlift',
     name: 'Deadlift',
     description: 'Total body power movement.',
-    muscleGroups: ['Back', 'Legs', 'Core'],
-    equipment: ['Barbell'],
+    primaryMuscleGroup: 'Back',
+    secondaryMuscleGroups: ['Legs', 'Core'],
+    equipment: 'Barbell',
     difficulty: 'advanced',
     category: 'Strength',
+    movementPattern: 'hinge',
     instructions: [
       'Stand with feet mid-foot under the bar.',
       'Bend over and grab the bar with a shoulder-width grip.',
@@ -45,27 +53,69 @@ const EXERCISES = [
     ]
   },
   {
+    id: 'dumbbell_overhead_press',
     name: 'Dumbbell Overhead Press',
     description: 'Build strong, stable shoulders.',
-    muscleGroups: ['Shoulders', 'Arms'],
-    equipment: ['Dumbbells'],
+    primaryMuscleGroup: 'Shoulders',
+    secondaryMuscleGroups: ['Arms'],
+    equipment: 'Dumbbell',
     difficulty: 'intermediate',
     category: 'Strength',
+    movementPattern: 'vertical_push',
     instructions: [
+      'Stand with feet shoulder-width apart.',
       'Hold dumbbells at shoulder height.',
-      'Press the weights overhead until arms are straight.',
-      'Lower back to shoulder height.',
-      'Maintain a neutral spine throughout.'
+      'Press the weights overhead until your arms are fully extended.',
+      'Lower back to starting position.'
+    ]
+  },
+  {
+    id: 'barbell_row',
+    name: 'Barbell Row',
+    description: 'Build a strong back.',
+    primaryMuscleGroup: 'Back',
+    secondaryMuscleGroups: ['Arms'],
+    equipment: 'Barbell',
+    difficulty: 'intermediate',
+    category: 'Strength',
+    movementPattern: 'horizontal_pull',
+    instructions: [
+      'Bend over with your back flat.',
+      'Grip the bar with hands slightly wider than shoulder-width.',
+      'Pull the bar to your lower chest.',
+      'Lower back to starting position.'
     ]
   }
 ];
 
-export const seedDatabase = async () => {
-  const exSnap = await getDocs(query(collection(db, 'exercise_library'), limit(1)));
-  if (exSnap.empty) {
-    for (const ex of EXERCISES) {
-      await addDoc(collection(db, 'exercise_library'), ex);
+export async function seedExercises() {
+  console.log('Checking for existing exercises...');
+
+  try {
+    for (const exercise of EXERCISES) {
+      const existing = await db.getExercise(exercise.id);
+
+      if (!existing) {
+        console.log(`Adding exercise: ${exercise.name}`);
+        await db.createExercise(exercise);
+      } else {
+        console.log(`Exercise already exists: ${exercise.name}`);
+      }
     }
-    console.log('Database seeded with exercises.');
+
+    console.log('Exercise seeding complete!');
+  } catch (error) {
+    console.error('Error seeding exercises:', error);
+    throw error;
   }
-};
+}
+
+if (import.meta.vitest) {
+  const { test, expect } = import.meta.vitest;
+
+  test('seedExercises seeds the database', async () => {
+    await seedExercises();
+    const exercise = await db.getExercise('barbell_bench_press');
+    expect(exercise).toBeDefined();
+  });
+}

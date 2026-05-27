@@ -1,5 +1,5 @@
-import { db } from '../firebase';
-import { collection, query, where, getDocs, addDoc, orderBy, limit } from 'firebase/firestore';
+import { db } from '../lib/db';
+import { supabase } from '../lib/supabase';
 import { WorkoutSession, Achievement, DailyLog } from '../types';
 
 /**
@@ -12,15 +12,18 @@ export const checkAndAwardAchievements = async (userId: string, session: Workout
 
   try {
     // 1. Fetch historical sessions to compare PRs
-    const historicalSessionsQuery = query(
-      collection(db, 'users', userId, 'workout_sessions'),
-      where('status', '==', 'completed'),
-      orderBy('date', 'desc'),
-      limit(100) // Limit to last 100 sessions for performance
-    );
-    const historicalSnap = await getDocs(historicalSessionsQuery);
-    const historicalSessions = historicalSnap.docs
-      .map(d => ({ id: d.id, ...d.data() } as WorkoutSession))
+    const { data: historicalData, error: historicalError } = await supabase
+      .from('workout_sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('status', 'completed')
+      .order('date', { ascending: false })
+      .limit(100);
+
+    if (historicalError) throw historicalError;
+
+    const historicalSessions = (historicalData || [])
+      .map(d => ({ id: d.id, ...d }) as WorkoutSession)
       .filter(s => s.id !== session.id);
 
     // Helper to calculate volume for an exercise in a session
@@ -145,27 +148,36 @@ export const checkAndAwardAchievements = async (userId: string, session: Workout
     }
 
     // 2. Step Streak (Last 7 daily logs)
-    const logsQuery = query(
-      collection(db, 'users', userId, 'daily_logs'),
-      orderBy('date', 'desc'),
-      limit(7)
-    );
-    const logsSnap = await getDocs(logsQuery);
-    const logs = logsSnap.docs.map(d => d.data() as DailyLog);
-    
+    const { data: logsData, error: logsError } = await supabase
+      .from('daily_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('date', { ascending: false })
+      .limit(7);
+
+    if (logsError) throw logsError;
+
+    const logs = (logsData || []).map(d => ({ ...d, stepCount: d.step_count, readinessScore: d.readiness_score }) as DailyLog);
+
     if (logs.length >= 7) {
-      const isStreak = logs.every(l => l.stepCount >= 5000);
+      const normalizedLogs = logs.map(l => ({
+        ...l,
+        stepCount: (l as any).step_count || l.stepCount || 0
+      }));
+      const isStreak = normalizedLogs.every(l => l.stepCount >= 5000);
       if (isStreak) {
         // Check if a streak achievement was earned TODAY to avoid duplicates
         const todayStr = new Date().toISOString().split('T')[0];
-        const existingStreakQuery = query(
-          collection(db, 'users', userId, 'achievements'),
-          where('name', '==', '7-Day Step Streak'),
-          where('earnedAt', '>=', todayStr)
-        );
-        const existingStreakSnap = await getDocs(existingStreakQuery);
-        
-        if (existingStreakSnap.empty) {
+        const { data: existingStreakData, error: existingStreakError } = await supabase
+          .from('achievements')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('name', '7-Day Step Streak')
+          .gte('earned_at', todayStr);
+
+        if (existingStreakError) throw existingStreakError;
+
+        if (!existingStreakData || existingStreakData.length === 0) {
           newAchievements.push({
             achievementId: `step_streak_7_${Date.now()}`,
             uid: userId,
@@ -179,9 +191,16 @@ export const checkAndAwardAchievements = async (userId: string, session: Workout
       }
     }
 
-    // Save new achievements to Firestore subcollection
+    // Save new achievements to Supabase
     for (const ach of newAchievements) {
-      await addDoc(collection(db, 'users', userId, 'achievements'), ach);
+      await db.createAchievement(userId, {
+        achievement_id: ach.achievementId,
+        name: ach.name,
+        description: ach.description,
+        earned_at: ach.earnedAt,
+        value: ach.value,
+        verified: ach.verified
+      });
     }
 
     return newAchievements;

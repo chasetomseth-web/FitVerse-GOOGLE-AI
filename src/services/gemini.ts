@@ -1,5 +1,5 @@
-import { doc, setDoc, arrayUnion } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "../firebase";
+import { db } from '../lib/db';
+import { handleSupabaseError, OperationType } from '../lib/supabase';
 import { format } from "date-fns";
 import { CoachResponse } from "../types/actions";
 import { GoogleGenAI, Type } from "@google/genai";
@@ -40,14 +40,14 @@ export const analyzeMealPhotos = async (
   const prompt = `
     You are an elite nutrition consultant. Analyze these meal photos.
     The user has provided multiple angles (e.g., top and side) to help with portion estimation.
-    
+
     TASK:
     1. Identify all food items in the images.
     2. Estimate the portion size (weight in grams) for each item.
     3. Calculate the calories and macronutrients (protein, carbs, fat) for each item.
     4. If you are UNCERTAIN about a food item (e.g., it's covered in sauce, looks like multiple things, or is partially hidden), provide your best guess for the name and macros, but ALSO include a specific, helpful question in the "question" field to help the user identify it (e.g., "Is this grilled chicken or tofu?").
     5. Provide a total summary for the entire meal.
-    
+
     ${userAnswers && userAnswers.length > 0 ? `
     USER CLARIFICATIONS:
     The user has provided answers to your previous questions:
@@ -197,27 +197,26 @@ export const generateCoachResponse = async (
   });
 
   const textResponse = response.text;
-  
+
   // Robust JSON extraction: Find the first { and the last }
   const firstBrace = textResponse.indexOf('{');
   const lastBrace = textResponse.lastIndexOf('}');
-  
+
   if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
     console.error("AI Response does not contain valid JSON:", textResponse);
     throw new Error("Invalid AI response format (No JSON found)");
   }
-  
+
   const cleanResponse = textResponse.substring(firstBrace, lastBrace + 1);
   const result = JSON.parse(cleanResponse) as CoachResponse;
   const text = result.message;
-  
+
   // Process Memory Updates
   if (text && context.profile.uid) {
       const memoryRegex = /MEMORY_UPDATE\s*\[(.*?)\]\s*:\s*(.*)/gi;
       let match;
       const today = format(new Date(), 'yyyy-MM-dd');
-      const profileRef = doc(db, 'users', context.profile.uid);
-      
+
       const updates: any = {};
       let newCoachNotes = context.profile.coachNotes || '';
 
@@ -225,7 +224,7 @@ export const generateCoachResponse = async (
         const category = match[1].trim();
         const content = match[2].trim();
         const formattedNote = `\n${today} [${category}]: ${content}`;
-        
+
         newCoachNotes += formattedNote;
         updates.coachNotes = newCoachNotes;
 
@@ -239,13 +238,13 @@ export const generateCoachResponse = async (
           if (weightMatch) {
             const weight = parseInt(weightMatch[1]);
             const baselines = { ...(context.profile.strengthBaselines || {}) };
-            
+
             if (lowerContent.includes('bench')) baselines.benchPress = weight;
             else if (lowerContent.includes('squat')) baselines.squat = weight;
             else if (lowerContent.includes('deadlift')) baselines.deadlift = weight;
             else if (lowerContent.includes('overhead press') || lowerContent.includes('ohp')) baselines.overheadPress = weight;
             else if (lowerContent.includes('row')) baselines.barbellRow = weight;
-            
+
             updates.strengthBaselines = baselines;
           }
         }
@@ -255,22 +254,28 @@ export const generateCoachResponse = async (
           const bodyParts = ['knee', 'shoulder', 'back', 'elbow', 'wrist', 'hip', 'ankle', 'neck'];
           const foundPart = bodyParts.find(p => lowerContent.includes(p));
           if (foundPart) {
-            updates.injuryLog = arrayUnion({
-              bodyPart: foundPart.charAt(0).toUpperCase() + foundPart.slice(1),
-              severity: 5,
-              dateReported: new Date().toISOString(),
-              status: 'active',
-              description: content
-            });
+            const currentInjuries = context.profile.injuryLog || [];
+            updates.injuryLog = [
+              ...currentInjuries,
+              {
+                bodyPart: foundPart.charAt(0).toUpperCase() + foundPart.slice(1),
+                severity: 5,
+                dateReported: new Date().toISOString(),
+                status: 'active',
+                description: content
+              }
+            ];
           }
         }
 
         // Nutrition
         if (lowerCategory.includes('nutrition') || lowerCategory.includes('food') || lowerCategory.includes('diet')) {
           if (lowerContent.includes('intolerant') || lowerContent.includes('allergic') || lowerContent.includes('avoid')) {
-            updates.knownIntolerances = arrayUnion(content);
+            const currentIntolerances = context.profile.knownIntolerances || [];
+            updates.knownIntolerances = [...currentIntolerances, content];
           } else {
-            updates.mealPreferences = arrayUnion(content);
+            const currentPreferences = context.profile.mealPreferences || [];
+            updates.mealPreferences = [...currentPreferences, content];
           }
         }
       }
@@ -286,10 +291,10 @@ export const generateCoachResponse = async (
           }, {} as any);
 
           if (Object.keys(cleanUpdates).length > 0) {
-            await setDoc(profileRef, cleanUpdates, { merge: true });
+            await db.updateUser(context.profile.uid, cleanUpdates);
           }
         } catch (err) {
-          handleFirestoreError(err, OperationType.UPDATE, `users/${context.profile.uid}`);
+          handleSupabaseError(err, OperationType.UPDATE, `users/${context.profile.uid}`);
         }
       }
     }

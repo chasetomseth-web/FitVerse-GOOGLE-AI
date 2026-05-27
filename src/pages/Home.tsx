@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useFirebase } from '../components/FirebaseProvider';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, query, where, orderBy, limit, onSnapshot, getDocs } from 'firebase/firestore';
+import { useSupabase } from '../components/SupabaseProvider';
+import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
 import { 
   format, 
   subDays, 
@@ -19,25 +18,7 @@ import {
   addMonths,
   subMonths
 } from 'date-fns';
-import { 
-  Flame, 
-  Zap, 
-  Clock, 
-  Dumbbell, 
-  ChevronRight, 
-  ChevronLeft,
-  Activity, 
-  Moon, 
-  Battery, 
-  Wind, 
-  Trophy, 
-  ArrowUpRight,
-  CheckCircle2,
-  X,
-  Scale,
-  Footprints,
-  Calendar as CalendarIcon
-} from 'lucide-react';
+import { Flame, Zap, Clock, Dumbbell, ChevronRight, ChevronLeft, Activity, Moon, Battery, Wind, Trophy, ArrowUpRight, CircleCheck as CheckCircle2, X, Scale, Footprints, Calendar as CalendarIcon } from 'lucide-react';
 import { WorkoutSession, Achievement, DailyLog, DailyWorkoutState } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -49,7 +30,6 @@ import {
 } from '../services/readinessEngine';
 import { calculateDailyNutrition, calculateTrendAdjustedNutrition } from '../services/nutritionEngine';
 import { generateWorkout } from '../services/workoutGenerationService';
-import { addDoc, setDoc, doc, updateDoc } from 'firebase/firestore';
 import { BottomNav } from '../components/BottomNav';
 import { useDailyLog } from '../hooks/useDailyLog';
 import { useActiveProgram } from '../hooks/useActiveProgram';
@@ -66,7 +46,7 @@ import { cn } from '../lib/utils';
 import { formatWeight, formatHeight } from '../lib/units';
 
 export const Home: React.FC = () => {
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const { profile, loading: profileLoading, updateProfile } = useUserProfile();
   const { log: todayLog, loading: logLoading, setLog } = useDailyLog();
   const { activeProgram, loading: programLoading, updateProgram } = useActiveProgram();
@@ -95,17 +75,36 @@ export const Home: React.FC = () => {
     const start = format(startOfMonth(currentCalendarMonth), 'yyyy-MM-dd');
     const end = format(endOfMonth(currentCalendarMonth), 'yyyy-MM-dd');
 
-    const q = query(
-      collection(db, 'users', user.uid, 'daily_workout_states'),
-      where('date', '>=', start),
-      where('date', '<=', end)
-    );
+    const fetchStates = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('daily_workout_states')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('date', start)
+          .lte('date', end);
 
-    const unsub = onSnapshot(q, (snap) => {
-      setCalendarStates(snap.docs.map(d => d.data() as DailyWorkoutState));
-    });
+        if (error) throw error;
+        if (data) {
+          setCalendarStates(data as DailyWorkoutState[]);
+        }
+      } catch (err) {
+        handleSupabaseError(err, OperationType.LIST, 'daily_workout_states');
+      }
+    };
 
-    return () => unsub();
+    fetchStates();
+
+    const channel = supabase
+      .channel(`daily_workout_states:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_workout_states', filter: `user_id=eq.${user.id}` }, () => {
+        fetchStates();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user, currentCalendarMonth, showSwapModal]);
   
   // Daily Check-In form state
@@ -134,39 +133,57 @@ export const Home: React.FC = () => {
   // Fetch weight stats
   React.useEffect(() => {
     if (!user || !profile) return;
-    
-    const logsQuery = query(
-      collection(db, 'users', user.uid, 'daily_logs'),
-      orderBy('date', 'desc'),
-      limit(14)
-    );
-    
-    const unsub = onSnapshot(logsQuery, (snap) => {
-      const logs = snap.docs.map(d => d.data() as DailyLog);
-      if (logs.length > 0) {
-        const current = logs[0].weightKg || profile.weightKg;
-        let change = 0;
-        
-        // Find the most recent log before today that has weight
-        const previousWithWeight = logs.slice(1).find(l => l.weightKg !== undefined);
-        if (logs[0].weightKg && previousWithWeight?.weightKg) {
-          change = logs[0].weightKg - previousWithWeight.weightKg;
+
+    const fetchWeightStats = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('daily_logs')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('date', { ascending: false })
+          .limit(14);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          const logs = data as any[];
+          const current = logs[0].weight_kg || profile.weightKg;
+          let change = 0;
+
+          // Find the most recent log before today that has weight
+          const previousWithWeight = logs.slice(1).find(l => l.weight_kg !== undefined && l.weight_kg !== null);
+          if (logs[0].weight_kg && previousWithWeight?.weight_kg) {
+            change = logs[0].weight_kg - previousWithWeight.weight_kg;
+          }
+
+          // Calculate 7-day average
+          const last7Days = logs.slice(0, 7);
+          const weights7Day = last7Days.filter(l => l.weight_kg !== undefined && l.weight_kg !== null).map(l => l.weight_kg);
+          const avg7Day = weights7Day.length > 0
+            ? weights7Day.reduce((a: number, b: number) => a + b, 0) / weights7Day.length
+            : profile.weightKg;
+
+          setWeightStats({ current, change, avg7Day });
+        } else {
+          setWeightStats({ current: profile.weightKg, change: 0, avg7Day: profile.weightKg });
         }
-        
-        // Calculate 7-day average
-        const last7Days = logs.slice(0, 7);
-        const weights7Day = last7Days.filter(l => l.weightKg !== undefined).map(l => l.weightKg!);
-        const avg7Day = weights7Day.length > 0 
-          ? weights7Day.reduce((a, b) => a + b, 0) / weights7Day.length 
-          : profile.weightKg;
-          
-        setWeightStats({ current, change, avg7Day });
-      } else {
-        setWeightStats({ current: profile.weightKg, change: 0, avg7Day: profile.weightKg });
+      } catch (err) {
+        handleSupabaseError(err, OperationType.LIST, 'daily_logs');
       }
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/daily_logs`));
-    
-    return () => unsub();
+    };
+
+    fetchWeightStats();
+
+    const channel = supabase
+      .channel(`daily_logs:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_logs', filter: `user_id=eq.${user.id}` }, () => {
+        fetchWeightStats();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user, profile]);
 
   const liveScore = profile ? calculateReadinessScore(
@@ -209,55 +226,56 @@ export const Home: React.FC = () => {
   const calculateStreak = async () => {
     if (!user || isCalculatingStreak) return;
     setIsCalculatingStreak(true);
-    
+
     try {
-      const logsQuery = query(
-        collection(db, 'users', user.uid, 'daily_logs'),
-        orderBy('date', 'desc'),
-        limit(365)
-      );
-      
-      const snap = await getDocs(logsQuery);
-      const logs = snap.docs.map(d => d.data() as DailyLog);
-      
+      const { data, error } = await supabase
+        .from('daily_logs')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false })
+        .limit(365);
+
+      if (error) throw error;
+
+      const logs = (data || []) as any[];
       let currentStreak = 0;
       const todayStr = format(new Date(), 'yyyy-MM-dd');
-      
+
       // Start checking from yesterday
       let checkDate = subDays(new Date(), 1);
-      
+
       while (true) {
         const dateStr = format(checkDate, 'yyyy-MM-dd');
         const log = logs.find(l => l.date === dateStr);
-        
-        if (log && log.workoutCompleted) {
+
+        if (log && log.workout_completed) {
           currentStreak++;
           checkDate = subDays(checkDate, 1);
         } else {
           break;
         }
-        
+
         if (currentStreak >= 365) break;
       }
-      
+
       // Add today if completed
       const todayLogData = logs.find(l => l.date === todayStr);
       let lastWorkoutDate = undefined;
-      if (todayLogData && todayLogData.workoutCompleted) {
+      if (todayLogData && todayLogData.workout_completed) {
         currentStreak++;
         lastWorkoutDate = todayStr;
       } else if (currentStreak > 0) {
         // Find the most recent workout date
-        const mostRecentLog = logs.find(l => l.workoutCompleted);
+        const mostRecentLog = logs.find(l => l.workout_completed);
         lastWorkoutDate = mostRecentLog?.date;
       }
-      
+
       setStreak(currentStreak);
-      
+
       // Update profile
-      const updates: any = { currentStreak };
+      const updates: any = { current_streak: currentStreak };
       if (lastWorkoutDate) {
-        updates.lastWorkoutDate = lastWorkoutDate;
+        updates.last_workout_date = lastWorkoutDate;
       }
       await updateProfile(updates);
     } catch (error) {
@@ -270,18 +288,44 @@ export const Home: React.FC = () => {
   React.useEffect(() => {
     if (!user) return;
 
-    const achievementQuery = query(
-      collection(db, 'users', user.uid, 'achievements'),
-      orderBy('earnedAt', 'desc'),
-      limit(5)
-    );
+    const fetchAchievements = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('achievements')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('earned_at', { ascending: false })
+          .limit(5);
 
-    const unsubAchievements = onSnapshot(achievementQuery, (snap) => {
-      setAchievements(snap.docs.map(d => ({ id: d.id, ...d.data() } as Achievement)));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/achievements`));
+        if (error) throw error;
+        if (data) {
+          // Convert snake_case to camelCase for frontend
+          const normalizedData = data.map((d: any) => ({
+            id: d.id,
+            achievementId: d.achievement_id,
+            name: d.name,
+            description: d.description,
+            earnedAt: d.earned_at,
+            userId: d.user_id
+          }));
+          setAchievements(normalizedData as Achievement[]);
+        }
+      } catch (err) {
+        handleSupabaseError(err, OperationType.LIST, 'achievements');
+      }
+    };
+
+    fetchAchievements();
+
+    const channel = supabase
+      .channel(`achievements:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'achievements', filter: `user_id=eq.${user.id}` }, () => {
+        fetchAchievements();
+      })
+      .subscribe();
 
     return () => {
-      unsubAchievements();
+      supabase.removeChannel(channel);
     };
   }, [user]);
 
@@ -349,37 +393,46 @@ export const Home: React.FC = () => {
 
       // Fetch History for Workout Generation
       const last7Days = Array.from({ length: 7 }, (_, i) => format(subDays(new Date(), i + 1), 'yyyy-MM-dd'));
-      
-      const logsSnap = await getDocs(query(
-        collection(db, 'users', user.uid, 'daily_logs'),
-        where('__name__', 'in', last7Days)
-      ));
-      const historyReadiness = logsSnap.docs.map(d => ({
-        date: d.id,
-        score: d.data().readinessScore || 70,
-        tier: d.data().readinessStatus || 'Stable'
+
+      const { data: logsData, error: logsError } = await supabase
+        .from('daily_logs')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('date', last7Days);
+
+      if (logsError) throw logsError;
+
+      const historyReadiness = (logsData || []).map(d => ({
+        date: d.date,
+        score: d.readiness_score || 70,
+        tier: d.readiness_status || 'Stable'
       }));
 
-      const sessionsSnap = await getDocs(query(
-        collection(db, 'users', user.uid, 'workout_sessions'),
-        where('date', 'in', last7Days)
-      ));
-      const historyWorkouts = sessionsSnap.docs.map(d => ({
-        date: d.data().date,
-        sessionType: d.data().sessionFocus,
-        completed: d.data().status === 'completed'
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from('workout_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('date', last7Days);
+
+      if (sessionsError) throw sessionsError;
+
+      const historyWorkouts = (sessionsData || []).map(d => ({
+        date: d.date,
+        sessionType: d.session_focus,
+        completed: d.status === 'completed'
       }));
 
       // Performance history (simplified for now)
-      const historyPerformance = sessionsSnap.docs.flatMap(d => 
-        (d.data().exercises || []).map((ex: any) => ({
-          date: d.data().date,
-          exercise: ex.exerciseName,
+      const historyPerformance = (sessionsData || []).flatMap(d => {
+        const exercises = d.exercises || [];
+        return exercises.map((ex: any) => ({
+          date: d.date,
+          exercise: ex.exerciseName || ex.exercise_name,
           weight: ex.sets?.[0]?.weight || 0,
           reps: ex.sets?.[0]?.reps || 0,
           rpe: ex.sets?.[0]?.rpe || 7
-        }))
-      );
+        }));
+      });
 
       // Generate the workout on the spot
       const session = await generateWorkout({
@@ -405,17 +458,22 @@ export const Home: React.FC = () => {
 
       // Update the Daily Workout State with generated blocks
       const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const stateRef = doc(db, 'users', user.uid, 'daily_workout_states', todayStr);
-      await setDoc(stateRef, {
-        exerciseBlocks: session.blocks,
-        workoutTitle: session.sessionFocus,
-        workoutFocus: session.sessionFocus,
-        workoutDuration: session.plannedDuration,
-        status: 'assigned'
-      }, { merge: true });
-      
+      const { error: updateError } = await supabase
+        .from('daily_workout_states')
+        .update({
+          exercise_blocks: session.blocks,
+          workout_title: session.sessionFocus,
+          workout_focus: session.sessionFocus,
+          workout_duration: session.plannedDuration,
+          status: 'assigned'
+        })
+        .eq('user_id', user.id)
+        .eq('date', todayStr);
+
+      if (updateError) throw updateError;
+
       toast(`Workout Generated: Your ${session.sessionFocus} session is ready.`, 'success');
-      
+
       // Automatically navigate to the workout page
       navigate('/workout');
 

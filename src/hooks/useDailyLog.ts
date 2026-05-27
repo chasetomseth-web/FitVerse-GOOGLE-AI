@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { useFirebase } from '../components/FirebaseProvider';
+import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
+import { useSupabase } from '../components/SupabaseProvider';
 import { DailyLog } from '../types';
 import { format } from 'date-fns';
 
 export const useDailyLog = () => {
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const [log, setLogState] = useState<DailyLog | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -19,41 +18,79 @@ export const useDailyLog = () => {
       return;
     }
 
-    const logRef = doc(db, 'users', user.uid, 'daily_logs', todayStr);
-    const unsubscribe = onSnapshot(logRef, (snap) => {
-      if (snap.exists()) {
-        setLogState(snap.data() as DailyLog);
-      } else {
-        setLogState(null);
-      }
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `users/${user.uid}/daily_logs/${todayStr}`);
-      setLoading(false);
-    });
+    const fetchLog = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('daily_logs')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('date', todayStr)
+          .maybeSingle();
 
-    return () => unsubscribe();
+        if (error) throw error;
+        setLogState(data as DailyLog | null);
+      } catch (error) {
+        handleSupabaseError(error, OperationType.GET, 'daily_logs');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLog();
+
+    // Subscribe to changes
+    const channel = supabase
+      .channel(`daily_log:${user.id}:${todayStr}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'daily_logs',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          const newData = payload.new as any;
+          if (newData && newData.date === todayStr) {
+            if (payload.eventType === 'DELETE') {
+              setLogState(null);
+            } else {
+              setLogState(newData as DailyLog);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user, todayStr]);
 
   const setLog = async (updates: Partial<DailyLog>) => {
     if (!user) return;
     try {
-      // Filter out undefined values
       const cleanUpdates = Object.entries(updates).reduce((acc, [key, value]) => {
         if (value !== undefined) {
-          acc[key] = value;
+          const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+          acc[snakeKey] = value;
         }
         return acc;
       }, {} as any);
 
-      const logRef = doc(db, 'users', user.uid, 'daily_logs', todayStr);
-      await setDoc(logRef, {
-        ...cleanUpdates,
-        uid: user.uid,
-        date: todayStr
-      }, { merge: true });
+      if (Object.keys(cleanUpdates).length === 0) return;
+
+      const { error } = await supabase
+        .from('daily_logs')
+        .upsert({
+          ...cleanUpdates,
+          user_id: user.id,
+          date: todayStr
+        });
+
+      if (error) throw error;
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/daily_logs/${todayStr}`);
+      handleSupabaseError(error, OperationType.WRITE, 'daily_logs');
     }
   };
 

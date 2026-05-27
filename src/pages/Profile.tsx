@@ -1,51 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useFirebase } from '../components/FirebaseProvider';
-import { auth, db, handleFirestoreError, OperationType } from '../firebase';
-import { signOut } from 'firebase/auth';
-import { 
-  doc, 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
-  limit, 
-  getDocs, 
-  startAfter, 
-  getDoc, 
-  writeBatch, 
-  setDoc 
-} from 'firebase/firestore';
-import { 
-  ChevronLeft,
-  User, 
-  Settings, 
-  LogOut, 
-  ChevronRight, 
-  Dumbbell, 
-  Target, 
-  Activity, 
-  Info, 
-  X,
-  Plus,
-  Minus,
-  CheckCircle2,
-  Check,
-  Camera,
-  Trophy,
-  Award,
-  Zap,
-  Clock,
-  ArrowUpRight,
-  ArrowDownRight,
-  Scale,
-  Ruler,
-  Calendar,
-  Sparkles,
-  AlertCircle,
-  RotateCcw,
-  Trash2
-} from 'lucide-react';
+import { useSupabase } from '../components/SupabaseProvider';
+import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
+import { ChevronLeft, User, Settings, LogOut, ChevronRight, Dumbbell, Target, Activity, Info, X, Plus, Minus, CircleCheck as CheckCircle2, Check, Camera, Trophy, Award, Zap, Clock, ArrowUpRight, ArrowDownRight, Scale, Ruler, Calendar, Sparkles, CircleAlert as AlertCircle, RotateCcw, Trash2 } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { UserProfile, WorkoutSession, BodyMetric, InjuryEntry, DailyLog, TrainingProgram } from '../types';
 import { format } from 'date-fns';
@@ -69,7 +26,7 @@ import { toast } from 'react-hot-toast';
 import { formatWeight, formatHeight, displayWeight, displayHeight } from '../lib/units';
 
 export const Profile: React.FC = () => {
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const { profile, updateProfile } = useUserProfile();
   const { log, setLog } = useDailyLog();
   const { activeProgram } = useActiveProgram();
@@ -131,12 +88,29 @@ export const Profile: React.FC = () => {
       
       // Deactivate current program
       if (activeProgram?.id) {
-        const oldProgramRef = doc(db, 'users', user.uid, 'training_programs', activeProgram.id);
-        await setDoc(oldProgramRef, { status: 'completed' }, { merge: true });
+        await supabase
+          .from('training_programs')
+          .update({ status: 'completed' })
+          .eq('id', activeProgram.id);
       }
 
       // Save new program
-      await setDoc(doc(db, 'users', user.uid, 'training_programs', aiProgram.programId), aiProgram);
+      const snakeCaseProgram: any = {
+        id: aiProgram.programId,
+        user_id: user.id,
+        program_name: aiProgram.programName,
+        total_weeks: aiProgram.totalWeeks,
+        current_week: aiProgram.currentWeek,
+        start_date: aiProgram.startDate,
+        expected_end_date: aiProgram.expectedEndDate,
+        status: aiProgram.status,
+        phases: aiProgram.phases,
+        weeks: aiProgram.weeks,
+        weekly_schedule: aiProgram.weeklySchedule,
+        consistency_score: aiProgram.consistencyScore,
+        progress_percent: aiProgram.progressPercent
+      };
+      await supabase.from('training_programs').upsert(snakeCaseProgram);
       
       // Also update the profile with any changes made in the modal
       if (Object.keys(localProfile).length > 0) {
@@ -248,20 +222,39 @@ export const Profile: React.FC = () => {
       const aiProgram = await generate12WeekProgram(updatedProfile);
 
       // 2. Deactivate existing programs
-      const programsRef = collection(db, 'users', user.uid, 'training_programs');
-      const activeProgramsQ = query(programsRef, where('status', '==', 'active'));
-      const activeSnap = await getDocs(activeProgramsQ);
-      
-      const batch = writeBatch(db);
-      activeSnap.docs.forEach(d => {
-        batch.set(d.ref, { status: 'completed' }, { merge: true });
-      });
+      const { data: activePrograms, error: fetchError } = await supabase
+        .from('training_programs')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('status', 'active');
+
+      if (fetchError) throw fetchError;
+
+      if (activePrograms && activePrograms.length > 0) {
+        await supabase
+          .from('training_programs')
+          .update({ status: 'completed' })
+          .in('id', activePrograms.map(p => p.id));
+      }
 
       // 3. Save new program
-      const newProgramRef = doc(programsRef, aiProgram.programId);
-      batch.set(newProgramRef, aiProgram);
+      const snakeCaseProgram: any = {
+        id: aiProgram.programId,
+        user_id: user.id,
+        program_name: aiProgram.programName,
+        total_weeks: aiProgram.totalWeeks,
+        current_week: aiProgram.currentWeek,
+        start_date: aiProgram.startDate,
+        expected_end_date: aiProgram.expectedEndDate,
+        status: aiProgram.status,
+        phases: aiProgram.phases,
+        weeks: aiProgram.weeks,
+        weekly_schedule: aiProgram.weeklySchedule,
+        consistency_score: aiProgram.consistencyScore,
+        progress_percent: aiProgram.progressPercent
+      };
+      await supabase.from('training_programs').upsert(snakeCaseProgram);
 
-      await batch.commit();
       toast.success('Program updated for your new goal!', { id: 'regen' });
     } catch (error) {
       console.error('Error in automatic program regeneration:', error);
@@ -318,31 +311,34 @@ export const Profile: React.FC = () => {
 
     const fetchInitialHistory = async () => {
       try {
-        const workoutQ = query(
-          collection(db, 'users', user.uid, 'workout_sessions'),
-          where('status', '==', 'completed'),
-          orderBy('date', 'desc'),
-          limit(10)
-        );
-        const weightQ = query(
-          collection(db, 'users', user.uid, 'body_metrics'),
-          orderBy('date', 'desc'),
-          limit(10)
-        );
+        // Fetch workouts - note: no startAfter equivalent for pagination in simple queries
+        const { data: workoutData, error: workoutError } = await supabase
+          .from('workout_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('status', 'completed')
+          .order('date', { ascending: false })
+          .limit(10);
 
-        const [workoutSnap, weightSnap] = await Promise.all([
-          getDocs(workoutQ),
-          getDocs(weightQ)
-        ]);
+        if (workoutError) throw workoutError;
 
-        setWorkoutHistory(workoutSnap.docs.map(d => ({ id: d.id, ...d.data() } as WorkoutSession)));
-        setLastWorkoutDoc(workoutSnap.docs[workoutSnap.docs.length - 1]);
-        setHasMoreWorkouts(workoutSnap.docs.length === 10);
-        
-        setWeightHistory(weightSnap.docs.map(d => ({ id: d.id, ...d.data() } as BodyMetric)));
+        setWorkoutHistory((workoutData || []).map(d => ({ id: d.id, ...d } as WorkoutSession)));
+        setHasMoreWorkouts((workoutData || []).length === 10);
+
+        // Fetch weight history
+        const { data: weightData, error: weightError } = await supabase
+          .from('body_metrics')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('date', { ascending: false })
+          .limit(10);
+
+        if (weightError) throw weightError;
+
+        setWeightHistory((weightData || []).map(d => ({ id: d.id, ...d } as BodyMetric)));
         setLoading(false);
       } catch (error) {
-        handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/history`);
+        handleSupabaseError(error, OperationType.LIST, 'workout_sessions/body_metrics');
         setLoading(false);
       }
     };
@@ -351,29 +347,30 @@ export const Profile: React.FC = () => {
   }, [user]);
 
   const loadMoreWorkouts = async () => {
-    if (!user || !lastWorkoutDoc || loadingMore || !hasMoreWorkouts) return;
+    if (!user || loadingMore || !hasMoreWorkouts) return;
 
     setLoadingMore(true);
     try {
-      const workoutQ = query(
-        collection(db, 'users', user.uid, 'workout_sessions'),
-        where('status', '==', 'completed'),
-        orderBy('date', 'desc'),
-        startAfter(lastWorkoutDoc),
-        limit(10)
-      );
+      const offset = workoutHistory.length;
+      const { data, error } = await supabase
+        .from('workout_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .order('date', { ascending: false })
+        .range(offset, offset + 9);
 
-      const snap = await getDocs(workoutQ);
-      if (!snap.empty) {
-        const newWorkouts = snap.docs.map(d => ({ id: d.id, ...d.data() } as WorkoutSession));
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const newWorkouts = data.map(d => ({ id: d.id, ...d } as WorkoutSession));
         setWorkoutHistory(prev => [...prev, ...newWorkouts]);
-        setLastWorkoutDoc(snap.docs[snap.docs.length - 1]);
-        setHasMoreWorkouts(snap.docs.length === 10);
+        setHasMoreWorkouts(data.length === 10);
       } else {
         setHasMoreWorkouts(false);
       }
     } catch (error) {
-      handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/history_more`);
+      handleSupabaseError(error, OperationType.LIST, 'workout_sessions');
     } finally {
       setLoadingMore(false);
     }
@@ -407,7 +404,7 @@ export const Profile: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      await signOut(auth);
+      await supabase.auth.signOut();
       navigate('/auth');
     } catch (error) {
       console.error("Logout Error:", error);

@@ -1,13 +1,13 @@
-import { doc, getDoc, updateDoc, arrayUnion, setDoc, increment } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db } from '../lib/db';
+import { handleSupabaseError, OperationType, supabase } from '../lib/supabase';
 import { CoachAction } from '../types/actions';
 import { format } from 'date-fns';
 import { DailyLog, DailyWorkoutState, UserProfile, MealEntry, WorkoutBlock } from '../types';
 
 export const handleCoachActions = async (
-  uid: string, 
-  actions: CoachAction[], 
-  profile: UserProfile, 
+  uid: string,
+  actions: CoachAction[],
+  profile: UserProfile,
   onActionComplete?: (message: string) => void
 ) => {
   if (!actions || actions.length === 0) return;
@@ -26,8 +26,6 @@ export const handleCoachActions = async (
           const fat = Math.round(Number(action.payload.fat || action.payload.fatG || 0));
           const mealTime = String(action.payload.meal_time || action.payload.mealTime || 'snack').toLowerCase();
 
-          const logRef = doc(db, 'users', uid, 'daily_logs', todayStr);
-          
           const newMeal: MealEntry = {
             mealType: (['breakfast', 'lunch', 'dinner', 'snack'].includes(mealTime) ? mealTime : 'snack') as any,
             foods: [name],
@@ -35,17 +33,23 @@ export const handleCoachActions = async (
             timestamp: new Date().toISOString()
           };
 
-          // Ensure basic log data exists if creating new
-          await setDoc(logRef, {
-            uid,
-            date: todayStr,
-            mealLog: arrayUnion(newMeal),
-            caloriesConsumed: increment(calories),
-            proteinConsumedG: increment(protein),
-            carbsConsumedG: increment(carbs),
-            fatConsumedG: increment(fat),
-          }, { merge: true });
-          
+          // Get current log to append meal
+          const currentLog = await db.getDailyLog(uid, todayStr);
+          const currentMealLog = (currentLog as any)?.mealLog || [];
+          const currentCalories = (currentLog as any)?.caloriesConsumed || 0;
+          const currentProtein = (currentLog as any)?.proteinConsumedG || 0;
+          const currentCarbs = (currentLog as any)?.carbsConsumedG || 0;
+          const currentFat = (currentLog as any)?.fatConsumedG || 0;
+
+          // Upsert the daily log with incremented values
+          await db.upsertDailyLog(uid, todayStr, {
+            mealLog: [...currentMealLog, newMeal],
+            caloriesConsumed: currentCalories + calories,
+            proteinConsumedG: currentProtein + protein,
+            carbsConsumedG: currentCarbs + carbs,
+            fatConsumedG: currentFat + fat
+          });
+
           onActionComplete?.(`Logged ${name} (${calories} kcal)`);
           break;
         }
@@ -56,13 +60,11 @@ export const handleCoachActions = async (
           const reps = String(action.payload.reps || '10');
           const weight = Number(action.payload.weight || 0);
 
-          const stateRef = doc(db, 'users', uid, 'daily_workout_states', todayStr);
-          
-          const stateSnap = await getDoc(stateRef);
-          if (stateSnap.exists()) {
-            const state = stateSnap.data() as DailyWorkoutState;
-            const blocks = [...(state.exerciseBlocks || [])];
-            
+          const state = await db.getDailyWorkoutState(uid, todayStr);
+
+          if (state) {
+            const blocks = [...((state as any).exerciseBlocks || [])] as WorkoutBlock[];
+
             if (blocks.length === 0) {
               blocks.push({
                 type: 'strength',
@@ -86,7 +88,7 @@ export const handleCoachActions = async (
               secondaryMuscleGroups: [],
             } as any);
 
-            await updateDoc(stateRef, { exerciseBlocks: blocks });
+            await db.upsertDailyWorkoutState(uid, todayStr, { exerciseBlocks: blocks });
             onActionComplete?.(`Added ${exerciseName} to today's workout`);
           } else {
             console.warn("No workout state found for today to add exercise.");
@@ -96,19 +98,23 @@ export const handleCoachActions = async (
 
         case 'update_weight': {
           const value = Number(action.payload.value);
-          const profileRef = doc(db, 'users', uid);
-          const logRef = doc(db, 'users', uid, 'daily_logs', todayStr);
 
-          await updateDoc(profileRef, { weightKg: value });
-          await setDoc(logRef, { weightKg: value }, { merge: true });
+          await db.updateUser(uid, { weightKg: value });
+
+          // Also update in daily log
+          const currentLog = await db.getDailyLog(uid, todayStr);
+          await db.upsertDailyLog(uid, todayStr, {
+            weightKg: value,
+            ...(currentLog || {})
+          });
+
           onActionComplete?.(`Weight updated to ${value}kg`);
           break;
         }
 
         case 'update_bodyfat': {
           const value = Number(action.payload.value);
-          const profileRef = doc(db, 'users', uid);
-          await updateDoc(profileRef, { bodyFatPercentage: value });
+          await db.updateUser(uid, { bodyFatPercentage: value });
           onActionComplete?.(`Body fat updated to ${value}%`);
           break;
         }
@@ -118,7 +124,7 @@ export const handleCoachActions = async (
       }
     } catch (error) {
       console.error(`Error handling coach action ${action.type}:`, error);
-      handleFirestoreError(error, OperationType.UPDATE, `users/${uid}`);
+      handleSupabaseError(error, OperationType.UPDATE, `users/${uid}`);
     }
   }
 };

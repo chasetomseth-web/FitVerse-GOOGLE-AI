@@ -1,33 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useFirebase } from '../components/FirebaseProvider';
-import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { 
-  ChevronLeft,
-  ChevronRight,
-  Calendar, 
-  Zap, 
-  Clock, 
-  Dumbbell, 
-  CheckCircle2, 
-  Circle, 
-  XCircle,
-  ArrowUpRight,
-  Info,
-  Moon,
-  Play,
-  ChevronDown,
-  ChevronUp,
-  ArrowRight,
-  Activity,
-  X,
-  ChevronLeftCircle,
-  ChevronRightCircle,
-  Calendar as CalendarIcon,
-  LayoutGrid,
-  List
-} from 'lucide-react';
+import { useSupabase } from '../components/SupabaseProvider';
+import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
+import { ChevronLeft, ChevronRight, Calendar, Zap, Clock, Dumbbell, CircleCheck as CheckCircle2, Circle, Circle as XCircle, ArrowUpRight, Info, Moon, Play, ChevronDown, ChevronUp, ArrowRight, Activity, X, CircleChevronLeft as ChevronLeftCircle, CircleChevronRight as ChevronRightCircle, Calendar as CalendarIcon, LayoutGrid, List } from 'lucide-react';
 import { WorkoutSession, DailyLog, DailyWorkoutState } from '../types';
 import { 
   format, 
@@ -61,7 +36,7 @@ import { adaptProgramForNextWeek } from '../services/adaptationService';
 import { ensureDailyWorkoutState } from '../services/workoutSynchronizationService';
 
 export const Program: React.FC = () => {
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const { profile } = useUserProfile();
   const { activeProgram, loading: programLoading } = useActiveProgram();
   const [weeklyWorkouts, setWeeklyWorkouts] = useState<WorkoutSession[]>([]);
@@ -113,68 +88,94 @@ export const Program: React.FC = () => {
 
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(currentMonth);
-    
+
     // Extend range to include start/end of weeks that overlap with month boundaries
     const fetchStart = startOfWeek(monthStart, { weekStartsOn: 1 });
     const fetchEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
     setLoadingLogs(true);
 
-    // Fetch workouts for the month range
-    const workoutQuery = query(
-      collection(db, 'users', user.uid, 'workout_sessions'),
-      where('date', '>=', format(fetchStart, 'yyyy-MM-dd')),
-      where('date', '<=', format(fetchEnd, 'yyyy-MM-dd'))
-    );
+    const fetchData = async () => {
+      try {
+        // Fetch workouts for the month range
+        const { data: workoutData, error: workoutError } = await supabase
+          .from('workout_sessions')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('date', format(fetchStart, 'yyyy-MM-dd'))
+          .lte('date', format(fetchEnd, 'yyyy-MM-dd'));
 
-    const unsubWorkouts = onSnapshot(workoutQuery, (snap) => {
-      const workouts = snap.docs.map(d => ({ id: d.id, ...d.data() } as WorkoutSession));
-      setMonthWorkouts(workouts);
-      // Also update weeklyWorkouts for the week view if needed
-      setWeeklyWorkouts(workouts.filter(w => {
-        const d = new Date(w.date);
-        return d >= startOfWeek(new Date(), { weekStartsOn: 1 }) && d <= endOfWeek(new Date(), { weekStartsOn: 1 });
-      }));
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/workout_sessions`));
+        if (workoutError) throw workoutError;
 
-    // Fetch daily logs for the month range
-    const logsQuery = query(
-      collection(db, 'users', user.uid, 'daily_logs'),
-      where('date', '>=', format(fetchStart, 'yyyy-MM-dd')),
-      where('date', '<=', format(fetchEnd, 'yyyy-MM-dd'))
-    );
+        const workouts = (workoutData || []).map(d => ({ id: d.id, ...d } as WorkoutSession));
+        setMonthWorkouts(workouts);
+        setWeeklyWorkouts(workouts.filter(w => {
+          const d = new Date(w.date);
+          return d >= startOfWeek(new Date(), { weekStartsOn: 1 }) && d <= endOfWeek(new Date(), { weekStartsOn: 1 });
+        }));
 
-    const unsubLogs = onSnapshot(logsQuery, (snap) => {
-      const logsMap: Record<string, DailyLog> = {};
-      snap.docs.forEach(d => {
-        const log = d.data() as DailyLog;
-        logsMap[log.date] = log;
-      });
-      setMonthLogs(logsMap);
-      setDailyLogs(logsMap); // Sync with existing dailyLogs state
-      setLoadingLogs(false);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/daily_logs`));
+        // Fetch daily logs
+        const { data: logsData, error: logsError } = await supabase
+          .from('daily_logs')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('date', format(fetchStart, 'yyyy-MM-dd'))
+          .lte('date', format(fetchEnd, 'yyyy-MM-dd'));
 
-    // Fetch Daily Workout States
-    const statesQuery = query(
-      collection(db, 'users', user.uid, 'daily_workout_states'),
-      where('date', '>=', format(fetchStart, 'yyyy-MM-dd')),
-      where('date', '<=', format(fetchEnd, 'yyyy-MM-dd'))
-    );
+        if (logsError) throw logsError;
 
-    const unsubStates = onSnapshot(statesQuery, (snap) => {
-      const statesMap: Record<string, DailyWorkoutState> = {};
-      snap.docs.forEach(d => {
-        const state = d.data() as DailyWorkoutState;
-        statesMap[state.date] = state;
-      });
-      setWorkoutStates(statesMap);
-    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/daily_workout_states`));
+        const logsMap: Record<string, DailyLog> = {};
+        (logsData || []).forEach(d => {
+          logsMap[d.date] = d as DailyLog;
+        });
+        setMonthLogs(logsMap);
+        setDailyLogs(logsMap);
+
+        // Fetch daily workout states
+        const { data: statesData, error: statesError } = await supabase
+          .from('daily_workout_states')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('date', format(fetchStart, 'yyyy-MM-dd'))
+          .lte('date', format(fetchEnd, 'yyyy-MM-dd'));
+
+        if (statesError) throw statesError;
+
+        const statesMap: Record<string, DailyWorkoutState> = {};
+        (statesData || []).forEach(d => {
+          statesMap[d.date] = d as DailyWorkoutState;
+        });
+        setWorkoutStates(statesMap);
+
+        setLoadingLogs(false);
+      } catch (err) {
+        handleSupabaseError(err, OperationType.LIST, 'workout_sessions/daily_logs/daily_workout_states');
+        setLoadingLogs(false);
+      }
+    };
+
+    fetchData();
+
+    // Subscribe to real-time updates
+    const workoutChannel = supabase
+      .channel(`workout_sessions:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workout_sessions', filter: `user_id=eq.${user.id}` }, fetchData)
+      .subscribe();
+
+    const logsChannel = supabase
+      .channel(`daily_logs:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_logs', filter: `user_id=eq.${user.id}` }, fetchData)
+      .subscribe();
+
+    const statesChannel = supabase
+      .channel(`daily_workout_states:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_workout_states', filter: `user_id=eq.${user.id}` }, fetchData)
+      .subscribe();
 
     return () => {
-      unsubWorkouts();
-      unsubLogs();
-      unsubStates();
+      supabase.removeChannel(workoutChannel);
+      supabase.removeChannel(logsChannel);
+      supabase.removeChannel(statesChannel);
     };
   }, [user, currentMonth]);
 

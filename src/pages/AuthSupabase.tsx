@@ -1,25 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { motion, AnimatePresence } from 'motion/react';
-import { Mail, Lock, User, LogIn, UserPlus, Chromium as Chrome, CircleAlert as AlertCircle, X, Apple, Sparkles } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Sparkles } from 'lucide-react';
 import { Logo } from '../components/Logo';
 
 export const Auth: React.FC = () => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showResetModal, setShowResetModal] = useState(false);
-  const [resetEmail, setResetEmail] = useState('');
-  const [resetSent, setResetSent] = useState(false);
-  const [showEmailForm, setShowEmailForm] = useState(false);
-
+  const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const syncProfile = async (user: any, customName?: string): Promise<boolean> => {
+  const syncProfile = async (user: any): Promise<boolean> => {
     const { data: existingProfile } = await supabase
       .from('user_profiles')
       .select('*')
@@ -29,7 +20,7 @@ export const Auth: React.FC = () => {
     if (!existingProfile) {
       const initialProfile = {
         id: user.id,
-        name: customName || user.user_metadata?.full_name || 'Athlete',
+        name: 'Athlete',
         email: user.email!,
         onboarding_complete: false,
         unit_system: 'imperial',
@@ -62,99 +53,39 @@ export const Auth: React.FC = () => {
 
       return false;
     } else {
-      const updates: any = {
-        last_active_at: new Date().toISOString()
-      };
-
-      if (user.user_metadata?.avatar_url && !existingProfile.photo_url) {
-        updates.photo_url = user.user_metadata.avatar_url;
-      }
-
-      if (existingProfile.name === 'Athlete' && user.user_metadata?.full_name) {
-        updates.name = user.user_metadata.full_name;
-      }
-
       await supabase
         .from('user_profiles')
-        .update(updates)
+        .update({ last_active_at: new Date().toISOString() })
         .eq('id', user.id);
 
       return existingProfile.onboarding_complete || false;
     }
   };
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+  const handleAutoLogin = async () => {
     setLoading(true);
+    setError('');
 
     try {
-      let onboardingComplete = false;
+      // Create a random email for anonymous user
+      const randomId = Math.random().toString(36).substring(2, 15);
+      const email = `user_${randomId}@fitverse.app`;
+      const password = `FitVerse_${randomId}`;
 
-      if (isLogin) {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (signInError) throw signInError;
-        onboardingComplete = await syncProfile(data.user);
-      } else {
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: {
-              full_name: name,
-            }
-          }
-        });
-        if (signUpError) throw signUpError;
-        onboardingComplete = await syncProfile(data.user, name);
-      }
+      // Sign up the user
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (signUpError) throw signUpError;
+      if (!data.user) throw new Error('Failed to create user');
+
+      const onboardingComplete = await syncProfile(data.user);
       navigate(onboardingComplete ? '/' : '/onboarding');
     } catch (err: any) {
       setError(err.message);
-    } finally {
       setLoading(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-      });
-      if (error) throw error;
-    } catch (err: any) {
-      setError(err.message);
-      setLoading(false);
-    }
-  };
-
-  const handleAppleSignIn = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'apple',
-      });
-      if (error) throw error;
-    } catch (err: any) {
-      setError(err.message);
-      setLoading(false);
-    }
-  };
-
-  const handleResetPassword = async () => {
-    if (!resetEmail) return;
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail);
-      if (error) throw error;
-      setResetSent(true);
-    } catch (err: any) {
-      setError(err.message);
     }
   };
 
@@ -238,152 +169,25 @@ export const Auth: React.FC = () => {
           </div>
         </motion.div>
 
-        <AnimatePresence mode="wait">
-          {!showEmailForm ? (
-            <motion.div
-              key="social-login"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="space-y-4"
-            >
-              <button
-                onClick={handleAppleSignIn}
-                className="w-full bg-white text-brand-black rounded-2xl py-4 font-display font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 hover:bg-white/90 transition-all active:scale-95 shadow-xl shadow-white/5"
-              >
-                <Apple className="w-5 h-5" />
-                <span>Continue with Apple</span>
-              </button>
+        {error && (
+          <div className="flex items-center gap-2 text-red-500 text-[10px] font-bold uppercase tracking-widest bg-red-500/10 p-3 rounded-xl border border-red-500/20">
+            <span>{error}</span>
+          </div>
+        )}
 
-              <button
-                onClick={handleGoogleSignIn}
-                className="w-full bg-white/5 text-white border border-white/10 rounded-2xl py-4 font-display font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 hover:bg-white/10 transition-all active:scale-95"
-              >
-                <Chrome className="w-5 h-5" />
-                <span>Continue with Google</span>
-              </button>
-
-              <button
-                onClick={() => setShowEmailForm(true)}
-                className="w-full py-4 text-[10px] font-black text-white/40 uppercase tracking-[0.2em] hover:text-white transition-colors"
-              >
-                Continue with Email
-              </button>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="email-form"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="glass-card p-8 space-y-6 relative"
-            >
-              <button
-                onClick={() => setShowEmailForm(false)}
-                className="absolute top-4 right-4 p-2 text-white/40 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              <div className="flex bg-white/5 p-1 rounded-xl">
-                <button
-                  onClick={() => setIsLogin(true)}
-                  className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${isLogin ? 'bg-brand-pink text-white shadow-lg shadow-brand-pink/20' : 'text-white/40'}`}
-                >
-                  Login
-                </button>
-                <button
-                  onClick={() => setIsLogin(false)}
-                  className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${!isLogin ? 'bg-brand-pink text-white shadow-lg shadow-brand-pink/20' : 'text-white/40'}`}
-                >
-                  Sign Up
-                </button>
-              </div>
-
-              <form onSubmit={handleAuth} className="space-y-4">
-                {!isLogin && (
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-bold text-white/40 uppercase tracking-widest ml-2">Full Name</label>
-                    <div className="relative">
-                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Athlete Name"
-                        className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:border-brand-pink transition-all"
-                        required={!isLogin}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-1">
-                  <label className="text-[8px] font-bold text-white/40 uppercase tracking-widest ml-2">Email Address</label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="name@example.com"
-                      className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:border-brand-pink transition-all"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between ml-2">
-                    <label className="text-[8px] font-bold text-white/40 uppercase tracking-widest">Password</label>
-                    {isLogin && (
-                      <button
-                        type="button"
-                        onClick={() => setShowResetModal(true)}
-                        className="text-[8px] font-bold text-brand-pink uppercase tracking-widest hover:underline"
-                      >
-                        Forgot?
-                      </button>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-sm focus:outline-none focus:border-brand-pink transition-all"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {error && (
-                  <div className="flex items-center gap-2 text-red-500 text-[10px] font-bold uppercase tracking-widest bg-red-500/10 p-3 rounded-xl border border-red-500/20">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full btn-primary flex items-center justify-center gap-2 py-4"
-                >
-                  {loading ? (
-                    <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      {isLogin ? <LogIn className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-                      <span>{isLogin ? 'Access Hub' : 'Create Account'}</span>
-                    </>
-                  )}
-                </button>
-              </form>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <motion.div>
+          <button
+            onClick={handleAutoLogin}
+            disabled={loading}
+            className="w-full bg-brand-pink text-white rounded-2xl py-4 font-display font-black uppercase tracking-widest text-xs flex items-center justify-center gap-3 hover:bg-brand-pink/90 transition-all active:scale-95 shadow-xl shadow-brand-pink/20"
+          >
+            {loading ? (
+              <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+            ) : (
+              <span>Get Started</span>
+            )}
+          </button>
+        </motion.div>
 
         <div className="text-center space-y-8">
           <div className="space-y-2">
@@ -407,57 +211,6 @@ export const Auth: React.FC = () => {
           </div>
         </div>
       </motion.div>
-
-      <AnimatePresence>
-        {showResetModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center p-6"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="glass-card w-full max-w-md p-8 space-y-6 relative"
-            >
-              <button
-                onClick={() => setShowResetModal(false)}
-                className="absolute top-4 right-4 p-2 text-white/40 hover:text-white"
-              >
-                <X className="w-6 h-6" />
-              </button>
-
-              <div className="text-center space-y-2">
-                <h3 className="text-2xl font-display font-black text-white uppercase tracking-tighter italic">Reset Access</h3>
-                <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Enter your email to receive a recovery link</p>
-              </div>
-
-              {resetSent ? (
-                <div className="text-center space-y-4 py-4">
-                  <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
-                    <Mail className="w-8 h-8 text-emerald-500" />
-                  </div>
-                  <p className="text-sm text-white/60">Recovery link sent to your inbox.</p>
-                  <button onClick={() => setShowResetModal(false)} className="btn-primary w-full">Back to Login</button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <input
-                    type="email"
-                    value={resetEmail}
-                    onChange={(e) => setResetEmail(e.target.value)}
-                    placeholder="name@example.com"
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-brand-pink transition-all"
-                  />
-                  <button onClick={handleResetPassword} className="btn-primary w-full py-4">Send Link</button>
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };

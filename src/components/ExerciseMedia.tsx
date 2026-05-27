@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { doc, getDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
-import { db } from '../firebase';
+import { supabase } from '../lib/supabase';
 import { Dumbbell } from 'lucide-react';
 
 interface ExerciseMediaProps {
@@ -49,12 +48,15 @@ export const ExerciseMedia: React.FC<ExerciseMediaProps> = ({
         // 1. Try direct ID matches
         const idsToTry = [id1, id2, id3];
         for (const id of idsToTry) {
-          const exRef = doc(db, 'exercise_library', id);
-          const exSnap = await getDoc(exRef);
-          if (exSnap.exists()) {
-            const data = exSnap.data();
-            if (data.videoUrl && isMounted) {
-              setVideoUrl(data.videoUrl);
+          const { data: exData, error } = await supabase
+            .from('exercise_library')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+
+          if (!error && exData) {
+            if (exData.video_url && isMounted) {
+              setVideoUrl(exData.video_url);
               setLoading(false);
               return;
             }
@@ -66,25 +68,25 @@ export const ExerciseMedia: React.FC<ExerciseMediaProps> = ({
           .replace(/^(barbell|dumbbell|db|bb|kb|kettlebell|weighted|bodyweight|air|assisted|supported|single\s+arm|single\s+leg|alternating|alt|seated|standing|lying|prone|supine|banded|band|resistance\s+band|cable|suspension|ring|stability\s+ball|medicine\s+ball|mb|slam\s+ball|wall\s+ball|box|bench|floor|smith\s+machine|machine|iso|isometric|isometric\s+isometric)\s+/g, '')
           .replace(/\s+(iso|isometric|hold|isometric\s+isometric)$/g, '')
           .trim();
-        
+
         if (coreName !== cleanName && coreName.length > 2) {
           const fuzzyId = coreName.replace(/[^a-z0-9]/g, '_');
-          const fuzzyRef = doc(db, 'exercise_library', fuzzyId);
-          const fuzzySnap = await getDoc(fuzzyRef);
-          if (fuzzySnap.exists()) {
-            const data = fuzzySnap.data();
-            if (data.videoUrl && isMounted) {
-              setVideoUrl(data.videoUrl);
+          const { data: fuzzyData, error: fuzzyError } = await supabase
+            .from('exercise_library')
+            .select('*')
+            .eq('id', fuzzyId)
+            .maybeSingle();
+
+          if (!fuzzyError && fuzzyData) {
+            if (fuzzyData.video_url && isMounted) {
+              setVideoUrl(fuzzyData.video_url);
               setLoading(false);
               return;
             }
           }
         }
 
-        // 3. Collection queries
-        const libRef = collection(db, 'exercise_library');
-        
-        // Try exact name match variations
+        // 3. Name queries
         const nameVariations = [
           exerciseName,
           exerciseName.toLowerCase(),
@@ -93,12 +95,16 @@ export const ExerciseMedia: React.FC<ExerciseMediaProps> = ({
         ];
 
         for (const variant of nameVariations) {
-          const qName = query(libRef, where('name', '==', variant), limit(1));
-          const snapName = await getDocs(qName);
-          if (!snapName.empty) {
-            const data = snapName.docs[0].data();
-            if (data.videoUrl && isMounted) {
-              setVideoUrl(data.videoUrl);
+          const { data: nameData, error: nameError } = await supabase
+            .from('exercise_library')
+            .select('*')
+            .eq('name', variant)
+            .limit(1)
+            .maybeSingle();
+
+          if (!nameError && nameData) {
+            if (nameData.video_url && isMounted) {
+              setVideoUrl(nameData.video_url);
               setLoading(false);
               return;
             }

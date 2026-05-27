@@ -1,26 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { doc, setDoc } from 'firebase/firestore';
 import { format } from 'date-fns';
-import { db } from '../firebase';
-import { useFirebase } from '../components/FirebaseProvider';
+import { supabase } from '../lib/supabase';
+import { useSupabase } from '../components/SupabaseProvider';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  User, 
-  Target, 
-  Activity, 
-  Dumbbell, 
-  CheckCircle2,
-  Search,
-  Plus,
-  Minus,
-  X,
-  TrendingUp,
-  Zap
-} from 'lucide-react';
+import { ChevronLeft, ChevronRight, User, Target, Activity, Dumbbell, CircleCheck as CheckCircle2, Search, Plus, Minus, X, TrendingUp, Zap } from 'lucide-react';
 import { UserProfile, TrainingProgram } from '../types';
 
 import { generate12WeekProgram } from '../services/programService';
@@ -51,7 +36,7 @@ const EQUIPMENT_OPTIONS = [
 ];
 
 export const Onboarding: React.FC = () => {
-  const { user } = useFirebase();
+  const { user } = useSupabase();
   const { profile, updateProfile } = useUserProfile();
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -271,28 +256,82 @@ export const Onboarding: React.FC = () => {
     if (updateProfile) {
       await updateProfile(finalProfile);
     } else {
-      await setDoc(doc(db, 'users', user!.uid), finalProfile, { merge: true });
+      // Convert to snake_case for Supabase
+      const snakeCaseProfile: any = {
+        id: user!.id,
+        name: finalProfile.name,
+        email: finalProfile.email,
+        photo_url: finalProfile.photoURL,
+        birth_date: finalProfile.birthDate,
+        age: finalProfile.age,
+        unit_system: finalProfile.unitSystem,
+        gender: finalProfile.gender,
+        height_cm: finalProfile.heightCm,
+        weight_kg: finalProfile.weightKg,
+        bodyweight_goal_kg: finalProfile.bodyweightGoalKg,
+        fitness_level: finalProfile.fitnessLevel,
+        primary_goal: finalProfile.primaryGoal,
+        selected_goals: finalProfile.selectedGoals,
+        preferred_workout_days: finalProfile.preferredWorkoutDays,
+        preferred_workout_duration: finalProfile.preferredWorkoutDuration,
+        training_environment: finalProfile.trainingEnvironment,
+        available_equipment: finalProfile.availableEquipment,
+        injury_log: finalProfile.injuryLog,
+        medical_notes: finalProfile.medicalNotes,
+        limitations: finalProfile.limitations,
+        onboarding_complete: true,
+        last_active_at: new Date().toISOString(),
+        created_at: profile?.createdAt || new Date().toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        strength_baselines: {
+          bench_press: finalProfile.strengthBaselines?.benchPress,
+          squat: finalProfile.strengthBaselines?.squat,
+          deadlift: finalProfile.strengthBaselines?.deadlift,
+          overhead_press: finalProfile.strengthBaselines?.overheadPress,
+          barbell_row: finalProfile.strengthBaselines?.row
+        },
+        coach_notes: '',
+        known_intolerances: [],
+        meal_preferences: []
+      };
+      await supabase.from('user_profiles').upsert(snakeCaseProfile);
     }
 
     // 2. Generate Program
     try {
       setGenMessage('Coach is forging your 12-week program...');
       const aiProgram = await generate12WeekProgram(finalProfile as UserProfile);
-      await setDoc(doc(db, 'users', user!.uid, 'training_programs', aiProgram.programId), aiProgram);
+      // Convert to snake_case for Supabase
+      const snakeCaseProgram: any = {
+        id: aiProgram.programId,
+        user_id: user!.id,
+        program_name: aiProgram.programName,
+        total_weeks: aiProgram.totalWeeks,
+        current_week: aiProgram.currentWeek,
+        start_date: aiProgram.startDate,
+        expected_end_date: aiProgram.expectedEndDate,
+        status: aiProgram.status,
+        phases: aiProgram.phases,
+        weeks: aiProgram.weeks,
+        weekly_schedule: aiProgram.weeklySchedule,
+        consistency_score: aiProgram.consistencyScore,
+        progress_percent: aiProgram.progressPercent
+      };
+      await supabase.from('training_programs').upsert(snakeCaseProgram);
     } catch (error) {
       console.error('Error generating AI program:', error);
       // Fallback to a simpler program if AI fails
       setGenMessage('Finalizing your program...');
       const fallbackProgramId = `prog_${Date.now()}`;
       const todayName = format(new Date(), 'EEEE');
-      await setDoc(doc(db, 'users', user!.uid, 'training_programs', fallbackProgramId), {
-        programId: fallbackProgramId,
-        uid: user!.uid,
-        programName: `${formData.primaryGoal.replace('_', ' ').toUpperCase()} PHASE 1`,
-        totalWeeks: 12,
-        currentWeek: 1,
-        startDate: new Date().toISOString(),
-        expectedEndDate: new Date(Date.now() + 12 * 7 * 24 * 60 * 60 * 1000).toISOString(),
+      const fallbackProgram: any = {
+        id: fallbackProgramId,
+        user_id: user!.id,
+        program_name: `${formData.primaryGoal.replace('_', ' ').toUpperCase()} PHASE 1`,
+        total_weeks: 12,
+        current_week: 1,
+        start_date: new Date().toISOString(),
+        expected_end_date: new Date(Date.now() + 12 * 7 * 24 * 60 * 60 * 1000).toISOString(),
         status: 'active',
         phases: [{ phaseName: 'Foundation', weekStart: 1, weekEnd: 4, focus: 'Form', volumeMultiplier: 1, intensityTarget: 7, keyPrinciple: 'Overload' }],
         weeks: Array.from({ length: 12 }).map((_, i) => ({
@@ -334,35 +373,36 @@ export const Onboarding: React.FC = () => {
             }
           ]
         })),
-        weeklySchedule: {},
-        consistencyScore: 0,
-        progressPercent: 0
-      });
+        weekly_schedule: {},
+        consistency_score: 0,
+        progress_percent: 0
+      };
+      await supabase.from('training_programs').upsert(fallbackProgram);
     }
 
     // 3. Calculate Nutrition and save to today's daily log
     const baseNutrition = calculateDailyNutrition(finalProfile as UserProfile, formData.trainingDaysPerWeek, 0, 100);
     const adjustedNutrition = calculateAdjustedNutrition(baseNutrition, 100, formData.gender);
-    
+
     const todayStr = format(new Date(), 'yyyy-MM-dd');
-    const logRef = doc(db, 'users', user!.uid, 'daily_logs', todayStr);
-    await setDoc(logRef, {
-      uid: user!.uid,
+    const dailyLog: any = {
+      user_id: user!.id,
       date: todayStr,
-      calorieBudget: adjustedNutrition.calories,
-      proteinTargetG: adjustedNutrition.proteinG,
-      carbTargetG: adjustedNutrition.carbsG,
-      fatTargetG: adjustedNutrition.fatG,
-      caloriesConsumed: 0,
-      proteinConsumedG: 0,
-      carbsConsumedG: 0,
-      fatConsumedG: 0,
-      mealLog: [],
-      waterGlasses: 0,
-      stepCount: 0,
-      activeCaloriesBurned: 0,
-      workoutCompleted: false
-    }, { merge: true });
+      calorie_budget: adjustedNutrition.calories,
+      protein_target_g: adjustedNutrition.proteinG,
+      carb_target_g: adjustedNutrition.carbsG,
+      fat_target_g: adjustedNutrition.fatG,
+      calories_consumed: 0,
+      protein_consumed_g: 0,
+      carbs_consumed_g: 0,
+      fat_consumed_g: 0,
+      meal_log: [],
+      water_glasses: 0,
+      step_count: 0,
+      active_calories_burned: 0,
+      workout_completed: false
+    };
+    await supabase.from('daily_logs').upsert(dailyLog);
 
     setGenMessage('Success!');
     setTimeout(() => navigate('/'), 1000);
