@@ -81,8 +81,11 @@ export const Auth: React.FC = () => {
       if (signUpError) throw signUpError;
       if (!data.user) throw new Error('Failed to create user');
 
-      const onboardingComplete = await syncProfile(data.user);
-      navigate(onboardingComplete ? '/' : '/onboarding');
+      // Sync profile - this will create a new profile with onboarding_complete = false
+      await syncProfile(data.user);
+
+      // Just let the app's routing logic handle navigation based on onboarding status
+      // The ProtectedRoute will redirect to /onboarding automatically
     } catch (err: any) {
       setError(err.message);
       setLoading(false);
