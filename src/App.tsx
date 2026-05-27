@@ -1,8 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { FirebaseProvider, useFirebase } from './components/FirebaseProvider';
+import { SupabaseProvider, useSupabase } from './components/SupabaseProvider';
 import { ToastProvider } from './components/ui/Toast';
-import { Auth } from './pages/Auth';
+import { Auth } from './pages/AuthSupabase';
 import { Onboarding } from './pages/Onboarding';
 import { Home } from './pages/Home';
 import { Program } from './pages/Program';
@@ -14,12 +14,12 @@ import { Diet } from './pages/Diet';
 import { WorkoutPlayer } from './pages/WorkoutPlayer';
 import { BottomNav } from './components/BottomNav';
 import { Logo } from './components/Logo';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
 
 import { useUserProfile } from './hooks/useUserProfile';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading: authLoading, authReady } = useFirebase();
+  const { user, loading: authLoading, authReady } = useSupabase();
   const { profile, loading: profileLoading } = useUserProfile();
   const location = useLocation();
 
@@ -42,14 +42,14 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to="/onboarding" />;
   }
 
-  if (profile && !profile.onboardingComplete && !isOnboardingPage) {
+  if (profile && !profile.onboarding_complete && !isOnboardingPage) {
     return <Navigate to="/onboarding" />;
   }
 
   const isWorkoutPlayer = location.pathname === '/workout';
 
   return (
-    <div className={`min-h-screen bg-brand-black text-white pb-24`}>
+    <div className="min-h-screen bg-brand-black text-white pb-24">
       {children}
       {!isWorkoutPlayer && <BottomNav />}
     </div>
@@ -58,86 +58,85 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 const AppRoutes: React.FC = () => {
   const location = useLocation();
-  const isWorkoutPlayer = location.pathname === '/workout';
 
   return (
     <div className="min-h-screen bg-brand-black">
       <AnimatePresence mode="wait">
         <Routes>
-        <Route path="/auth" element={<Auth />} />
-        <Route 
-          path="/onboarding" 
-          element={
-            <ProtectedRoute>
-              <Onboarding />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/" 
-          element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/program" 
-          element={
-            <ProtectedRoute>
-              <Program />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/coach" 
-          element={
-            <ProtectedRoute>
-              <Coach />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/diet" 
-          element={
-            <ProtectedRoute>
-              <Diet />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/progress" 
-          element={
-            <ProtectedRoute>
-              <Progress />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/library" 
-          element={
-            <ProtectedRoute>
-              <Library />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/profile" 
-          element={
-            <ProtectedRoute>
-              <Profile />
-            </ProtectedRoute>
-          } 
-        />
-        <Route 
-          path="/workout" 
-          element={
-            <ProtectedRoute>
-              <WorkoutPlayer />
-            </ProtectedRoute>
-          } 
-        />
-      </Routes>
+          <Route path="/auth" element={<Auth />} />
+          <Route
+            path="/onboarding"
+            element={
+              <ProtectedRoute>
+                <Onboarding />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Home />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/program"
+            element={
+              <ProtectedRoute>
+                <Program />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/coach"
+            element={
+              <ProtectedRoute>
+                <Coach />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/diet"
+            element={
+              <ProtectedRoute>
+                <Diet />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/progress"
+            element={
+              <ProtectedRoute>
+                <Progress />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/library"
+            element={
+              <ProtectedRoute>
+                <Library />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workout"
+            element={
+              <ProtectedRoute>
+                <WorkoutPlayer />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
       </AnimatePresence>
     </div>
   );
@@ -145,12 +144,12 @@ const AppRoutes: React.FC = () => {
 
 export default function App() {
   return (
-    <FirebaseProvider>
+    <SupabaseProvider>
       <ToastProvider>
         <Router>
           <AppRoutes />
         </Router>
       </ToastProvider>
-    </FirebaseProvider>
+    </SupabaseProvider>
   );
 }
