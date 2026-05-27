@@ -1,0 +1,177 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Core user data and preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "onboardingComplete": { "type": "boolean" },
+        "weightKg": { "type": "number" },
+        "heightCm": { "type": "number" },
+        "age": { "type": "number" },
+        "primaryGoal": { "type": "string" },
+        "fitnessLevel": { "type": "string" },
+        "availableEquipment": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["uid", "name", "email"]
+    },
+    "DailyLog": {
+      "title": "Daily Log",
+      "description": "Daily readiness and nutrition tracking",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "date": { "type": "string" },
+        "readinessScore": { "type": "number" },
+        "caloriesConsumed": { "type": "number" },
+        "waterGlasses": { "type": "number" },
+        "workoutCompleted": { "type": "boolean" }
+      },
+      "required": ["uid", "date"]
+    },
+    "WorkoutSession": {
+      "title": "Workout Session",
+      "description": "A single workout instance",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string" },
+        "sessionFocus": { "type": "string" },
+        "actualDuration": { "type": "number" }
+      },
+      "required": ["uid", "date"]
+    },
+    "BodyMetric": {
+      "title": "Body Metric",
+      "description": "Weight and body composition tracking",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "date": { "type": "string" },
+        "weightKg": { "type": "number" }
+      },
+      "required": ["uid", "date", "weightKg"]
+    },
+    "Achievement": {
+      "title": "Achievement",
+      "description": "User earned achievements",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "achievementId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "earnedAt": { "type": "string" },
+        "verified": { "type": "boolean" }
+      },
+      "required": ["uid", "achievementId", "name", "earnedAt"]
+    },
+    "TrainingProgram": {
+      "title": "Training Program",
+      "description": "User's active training program",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "programName": { "type": "string" },
+        "status": { "type": "string" },
+        "currentWeek": { "type": "number" },
+        "totalWeeks": { "type": "number" }
+      },
+      "required": ["uid", "programName", "status"]
+    },
+    "CoachConversation": {
+      "title": "Coach Conversation",
+      "description": "Daily chat history with Personal Coach",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "date": { "type": "string" },
+        "messages": { "type": "array", "items": { "type": "object" } }
+      },
+      "required": ["uid", "date", "messages"]
+    },
+    "ExercisePerformance": {
+      "title": "Exercise Performance",
+      "description": "Detailed performance data for a single exercise in a session",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "exerciseId": { "type": "string" },
+        "exerciseName": { "type": "string" },
+        "sets": { "type": "array", "items": { "type": "object" } },
+        "rpe": { "type": "number" },
+        "notes": { "type": "string" },
+        "completedAt": { "type": "string" }
+      },
+      "required": ["uid", "sessionId", "exerciseId", "exerciseName", "sets"]
+    },
+    "DailyWorkoutState": {
+      "title": "Daily Workout State",
+      "description": "Authoritative state for a specific day's workout",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "date": { "type": "string" },
+        "programPhase": { "type": "string" },
+        "programDayType": { "type": "string" },
+        "workoutTitle": { "type": "string" },
+        "workoutFocus": { "type": "string" },
+        "workoutDuration": { "type": "number" },
+        "targetIntensity": { "type": "string" },
+        "exerciseBlocks": { "type": "array", "items": { "type": "object" } },
+        "status": { "type": "string", "enum": ["scheduled", "in-progress", "completed", "skipped", "rest"] },
+        "programId": { "type": "string" },
+        "programWeek": { "type": "number" }
+      },
+      "required": ["id", "uid", "date", "status", "programId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile data"
+    },
+    "/users/{userId}/daily_logs/{logId}": {
+      "schema": "DailyLog",
+      "description": "Daily tracking logs"
+    },
+    "/users/{userId}/workout_sessions/{sessionId}": {
+      "schema": "WorkoutSession",
+      "description": "Workout session history"
+    },
+    "/users/{userId}/workout_sessions/{sessionId}/performance/{performanceId}": {
+      "schema": "ExercisePerformance",
+      "description": "Detailed exercise metrics for the session"
+    },
+    "/users/{userId}/body_metrics/{metricId}": {
+      "schema": "BodyMetric",
+      "description": "Weight tracking history"
+    },
+    "/users/{userId}/achievements/{achievementId}": {
+      "schema": "Achievement",
+      "description": "User achievements"
+    },
+    "/users/{userId}/training_programs/{programId}": {
+      "schema": "TrainingProgram",
+      "description": "User training programs"
+    },
+    "/users/{userId}/coach_conversations/{conversationId}": {
+      "schema": "CoachConversation",
+      "description": "Daily coach chats"
+    },
+    "/users/{userId}/daily_workout_states/{date}": {
+      "schema": "DailyWorkoutState",
+      "description": "Authoritative workout state for a given date"
+    },
+    "/exercise_library/{exerciseId}": {
+      "schema": "object",
+      "description": "Public exercise database"
+    }
+  }
+}

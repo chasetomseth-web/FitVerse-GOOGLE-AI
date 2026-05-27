@@ -1,0 +1,738 @@
+src/hooks/useDailyWorkout.ts:import { DailyWorkoutState } from '../types';
+src/hooks/useDailyWorkout.ts:export const useDailyWorkout = (dateStr?: string) => {
+src/hooks/useDailyWorkout.ts:  const [workoutState, setWorkoutState] = useState<DailyWorkoutState | null>(null);
+src/hooks/useDailyWorkout.ts:    const stateRef = doc(db, 'users', user.uid, 'daily_workout_states', targetDate);
+src/hooks/useDailyWorkout.ts:        setWorkoutState(snap.data() as DailyWorkoutState);
+src/hooks/useDailyWorkout.ts:      handleFirestoreError(error, OperationType.GET, `users/${user.uid}/daily_workout_states/${targetDate}`);
+src/hooks/useDailyLog.ts:import { DailyLog } from '../types';
+src/hooks/useDailyLog.ts:export const useDailyLog = () => {
+src/hooks/useDailyLog.ts:  const [log, setLogState] = useState<DailyLog | null>(null);
+src/hooks/useDailyLog.ts:    const logRef = doc(db, 'users', user.uid, 'daily_logs', todayStr);
+src/hooks/useDailyLog.ts:        setLogState(snap.data() as DailyLog);
+src/hooks/useDailyLog.ts:      handleFirestoreError(error, OperationType.GET, `users/${user.uid}/daily_logs/${todayStr}`);
+src/hooks/useDailyLog.ts:  const setLog = async (updates: Partial<DailyLog>) => {
+src/hooks/useDailyLog.ts:      const logRef = doc(db, 'users', user.uid, 'daily_logs', todayStr);
+src/hooks/useDailyLog.ts:      await setDoc(logRef, {
+src/hooks/useDailyLog.ts:      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/daily_logs/${todayStr}`);
+src/hooks/useActiveProgram.ts:import { TrainingProgram } from '../types';
+src/hooks/useActiveProgram.ts:  const [activeProgram, setActiveProgram] = useState<TrainingProgram | null>(null);
+src/hooks/useActiveProgram.ts:      collection(db, 'users', user.uid, 'training_programs'),
+src/hooks/useActiveProgram.ts:        setActiveProgram({ id: snap.docs[0].id, ...snap.docs[0].data() } as TrainingProgram);
+src/hooks/useActiveProgram.ts:      handleFirestoreError(error, OperationType.GET, `users/${user.uid}/training_programs`);
+src/hooks/useActiveProgram.ts:  const updateProgram = async (updates: Partial<TrainingProgram>) => {
+src/hooks/useActiveProgram.ts:      const programRef = doc(db, 'users', user.uid, 'training_programs', activeProgram.id);
+src/hooks/useActiveProgram.ts:      await setDoc(programRef, updates, { merge: true });
+src/hooks/useActiveProgram.ts:      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}/training_programs/${activeProgram.id}`);
+src/hooks/useUserProfile.ts:      await setDoc(profileRef, cleanUpdates, { merge: true });
+src/hooks/useWorkoutSession.ts:      await setDoc(sessionRef, cleanUpdates, { merge: true });
+src/pages/Coach.tsx:  Brain, 
+src/pages/Coach.tsx:import { CoachConversation, CoachMessage, DailyLog, TrainingProgram, WorkoutSession } from '../types';
+src/pages/Coach.tsx:import { useDailyLog } from '../hooks/useDailyLog';
+src/pages/Coach.tsx:  const { log: todayLog } = useDailyLog();
+src/pages/Coach.tsx:      const aiResponse = await generateCoachResponse(prompt, context);
+src/pages/Coach.tsx:        parts: [{ text: aiResponse || "Welcome back! I'm ready to help you optimize your training today." }],
+src/pages/Coach.tsx:      await setDoc(doc(db, 'users', user.uid, 'coach_conversations', todayStr), {
+src/pages/Coach.tsx:    const remaining = {
+src/pages/Coach.tsx:      remaining,
+src/pages/Coach.tsx:      const aiResponse = await generateCoachResponse(
+src/pages/Coach.tsx:        parts: [{ text: aiResponse || "I'm having trouble connecting right now. Let's try again in a moment." }],
+src/pages/Coach.tsx:      await setDoc(doc(db, 'users', user.uid, 'coach_conversations', todayStr), {
+src/pages/Coach.tsx:        <main className="px-6 space-y-6">
+src/pages/Coach.tsx:        </main>
+src/pages/Coach.tsx:                <Brain className="w-5 h-5 text-brand-pink" />
+src/pages/Coach.tsx:      <main className="flex-1 overflow-y-auto p-6 space-y-6 relative custom-scrollbar bg-[radial-gradient(circle_at_top_right,rgba(255,42,109,0.03),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(212,175,55,0.03),transparent_40%)]" ref={scrollRef}>
+src/pages/Coach.tsx:      </main>
+src/pages/Profile.tsx:import { UserProfile, WorkoutSession, BodyMetric, InjuryEntry, DailyLog, TrainingProgram } from '../types';
+src/pages/Profile.tsx:import { calculateDailyNutrition } from '../services/nutritionEngine';
+src/pages/Profile.tsx:import { useDailyLog } from '../hooks/useDailyLog';
+src/pages/Profile.tsx:  const { log, setLog } = useDailyLog();
+src/pages/Profile.tsx:    // Use localProfile if available, otherwise fallback to profile
+src/pages/Profile.tsx:      const aiProgram = await generate12WeekProgram(profileToUse);
+src/pages/Profile.tsx:      console.log('AI Program generated:', aiProgram);
+src/pages/Profile.tsx:        const oldProgramRef = doc(db, 'users', user.uid, 'training_programs', activeProgram.id);
+src/pages/Profile.tsx:        await setDoc(oldProgramRef, { status: 'completed' }, { merge: true });
+src/pages/Profile.tsx:      await setDoc(doc(db, 'users', user.uid, 'training_programs', aiProgram.programId), aiProgram);
+src/pages/Profile.tsx:        await updateProfile(localProfile);
+src/pages/Profile.tsx:      toast.error('Failed to generate new program.');
+src/pages/Profile.tsx:      await updateProfile(updates);
+src/pages/Profile.tsx:      const equipmentTriggerFields = ['availableEquipment'];
+src/pages/Profile.tsx:        await handleNutritionRecalculation(localProfile as UserProfile);
+src/pages/Profile.tsx:        await handleProgramRegeneration(localProfile as UserProfile);
+src/pages/Profile.tsx:    const trainingDays = updatedProfile.preferredWorkoutDays?.length || 3;
+src/pages/Profile.tsx:    const newTargets = calculateDailyNutrition(
+src/pages/Profile.tsx:      trainingDays,
+src/pages/Profile.tsx:    await setLog({
+src/pages/Profile.tsx:      // 1. Generate new AI program
+src/pages/Profile.tsx:      const aiProgram = await generate12WeekProgram(updatedProfile);
+src/pages/Profile.tsx:      const programsRef = collection(db, 'users', user.uid, 'training_programs');
+src/pages/Profile.tsx:      const activeSnap = await getDocs(activeProgramsQ);
+src/pages/Profile.tsx:      const newProgramRef = doc(programsRef, aiProgram.programId);
+src/pages/Profile.tsx:      batch.set(newProgramRef, aiProgram);
+src/pages/Profile.tsx:      await batch.commit();
+src/pages/Profile.tsx:      toast.error('Failed to update program automatically. Try manual regeneration in settings.', { id: 'regen' });
+src/pages/Profile.tsx:    const available = updatedProfile.availableEquipment || ['Bodyweight'];
+src/pages/Profile.tsx:        while (required.some(req => !available.includes(req as any))) {
+src/pages/Profile.tsx:          const missing = required.find(req => !available.includes(req as any))!;
+src/pages/Profile.tsx:        const [workoutSnap, weightSnap] = await Promise.all([
+src/pages/Profile.tsx:      const snap = await getDocs(workoutQ);
+src/pages/Profile.tsx:    await updateProfile({ injuryLog: updatedInjuries });
+src/pages/Profile.tsx:    await updateProfile({ injuryLog: updatedInjuries });
+src/pages/Profile.tsx:      await signOut(auth);
+src/pages/Profile.tsx:      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+src/pages/Profile.tsx:        await updateProfile({ photoURL: photoData });
+src/pages/Profile.tsx:              <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">{profile?.email}</p>
+src/pages/Profile.tsx:                { id: 'muscle_gain', name: 'Muscle Gain' },
+src/pages/Profile.tsx:                const isSelected = localProfile.availableEquipment?.includes(eq as any);
+src/pages/Profile.tsx:                      const current = localProfile.availableEquipment || [];
+src/pages/Profile.tsx:                      setLocalProfile(prev => ({ ...prev, availableEquipment: updated }));
+src/pages/Profile.tsx:                  setLocalProfile(prev => ({ ...prev, availableEquipment: all }));
+src/pages/Profile.tsx:                  <h4 className="text-[10px] font-black text-brand-pink uppercase tracking-widest">Training Preferences</h4>
+src/pages/Profile.tsx:                      <label className="text-[8px] font-bold text-white/40 uppercase tracking-widest ml-2">Training Days Per Week</label>
+src/pages/Profile.tsx:                  <h4 className="text-[10px] font-black text-brand-pink uppercase tracking-widest">Training Program</h4>
+src/pages/Profile.tsx:                          await refreshExerciseMetadata((p) => setRefreshProgress(p));
+src/pages/Profile.tsx:                          console.error('Refresh failed:', err);
+src/pages/Profile.tsx:                          alert('Failed to refresh metadata. Check console for details.');
+src/pages/Profile.tsx:                      await updateProfile(localProfile);
+src/pages/Profile.tsx:                <p className="text-[8px] text-white/40 font-bold uppercase tracking-widest">Help us adjust your training safely</p>
+src/pages/Profile.tsx:                    placeholder="Describe the pain or limitation..."
+src/pages/Library.tsx:  ResponsiveContainer 
+src/pages/Library.tsx:  const isAdmin = user?.email === 'chasetomseth@gmail.com';
+src/pages/Library.tsx:      await seedExerciseLibrary((progress) => setSeedProgress(progress));
+src/pages/Library.tsx:        alert('Library initialization complete! All 450+ exercises are now available.');
+src/pages/Library.tsx:        alert('Initialization encountered an issue. Please try again.');
+src/pages/Library.tsx:      await refreshExerciseMetadata((progress) => setSeedProgress(progress));
+src/pages/Library.tsx:          const snap = await getDocs(q);
+src/pages/Library.tsx:      <main className="px-6 py-8 space-y-6 max-w-4xl mx-auto">
+src/pages/Library.tsx:      </main>
+src/pages/Library.tsx:      {/* Exercise Detail Modal */}
+src/pages/Library.tsx:                          <span key={`${selectedExercise.id}-muscle-detail-${m}-${i}`} className="px-2 py-0.5 bg-white/5 text-white/40 text-[8px] font-black uppercase tracking-widest rounded">
+src/pages/Library.tsx:                          <ResponsiveContainer width="100%" height="100%">
+src/pages/Library.tsx:                          </ResponsiveContainer>
+src/pages/Diet.tsx:import { DailyLog, MealEntry, BodyMetric } from '../types';
+src/pages/Diet.tsx:  ResponsiveContainer,
+src/pages/Diet.tsx:import { getRemainingMacros } from '../services/nutritionEngine';
+src/pages/Diet.tsx:import { useDailyLog } from '../hooks/useDailyLog';
+src/pages/Diet.tsx:  const { log: todayLog, loading: logLoading, setLog } = useDailyLog();
+src/pages/Diet.tsx:  const remaining = getRemainingMacros(
+src/pages/Diet.tsx:    const updatedLog: Partial<DailyLog> = {
+src/pages/Diet.tsx:      await setLog(updatedLog);
+src/pages/Diet.tsx:      const results = await analyzeMealPhotos(capturedPhotos, newAnswers);
+src/pages/Diet.tsx:      const [fdcResults, offResults] = await Promise.all([
+src/pages/Diet.tsx:            My remaining macros for today are: ${remaining.calories} kcal, ${remaining.protein}g protein, ${remaining.carbs}g carbs, ${remaining.fat}g fat. 
+src/pages/Diet.tsx:            Suggest a high-performance meal for my next meal slot that perfectly fits my remaining macros. Provide a detailed description of the meal and explain why it's a good choice for my goals and current readiness.` 
+src/pages/Diet.tsx:      const response = await generateCoachResponse(prompt as any, { profile, todayLog });
+src/pages/Diet.tsx:      <main className="px-6 space-y-8 max-w-4xl mx-auto">
+src/pages/Diet.tsx:              {Math.round(remaining.calories)}
+src/pages/Diet.tsx:            <span className="text-[10px] font-black text-white/40 uppercase tracking-widest mt-1">Kcal Remaining</span>
+src/pages/Diet.tsx:                await setLog({ 
+src/pages/Diet.tsx:              <ResponsiveContainer width="100%" height="100%">
+src/pages/Diet.tsx:                    domain={['dataMin - 1', 'dataMax + 1']}
+src/pages/Diet.tsx:              </ResponsiveContainer>
+src/pages/Diet.tsx:                <p className="text-[10px] text-white/20 font-bold uppercase tracking-widest">No weight history available.</p>
+src/pages/Diet.tsx:        {/* AI Recommendation */}
+src/pages/Diet.tsx:                    Ready to optimize your next meal based on remaining macros?
+src/pages/Diet.tsx:      </main>
+src/pages/Auth.tsx:  signInWithEmailAndPassword, 
+src/pages/Auth.tsx:  createUserWithEmailAndPassword, 
+src/pages/Auth.tsx:  sendPasswordResetEmail 
+src/pages/Auth.tsx:import { Mail, Lock, User, LogIn, UserPlus, Chrome, AlertCircle, X, Apple, Star, ShieldCheck, ArrowRight, Sparkles } from 'lucide-react';
+src/pages/Auth.tsx:  const [email, setEmail] = useState('');
+src/pages/Auth.tsx:  const [resetEmail, setResetEmail] = useState('');
+src/pages/Auth.tsx:  const [showEmailForm, setShowEmailForm] = useState(false);
+src/pages/Auth.tsx:    const profileSnap = await getDoc(profileRef);
+src/pages/Auth.tsx:        email: user.email!,
+src/pages/Auth.tsx:        primaryGoal: 'muscle_gain',
+src/pages/Auth.tsx:        availableEquipment: [],
+src/pages/Auth.tsx:        trainingEnvironment: 'mixed',
+src/pages/Auth.tsx:      await setDoc(profileRef, initialProfile);
+src/pages/Auth.tsx:      // Sync photoURL if missing in profile but available in auth
+src/pages/Auth.tsx:      await setDoc(profileRef, updates, { merge: true });
+src/pages/Auth.tsx:        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+src/pages/Auth.tsx:        onboardingComplete = await syncProfile(userCredential.user);
+src/pages/Auth.tsx:        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+src/pages/Auth.tsx:        onboardingComplete = await syncProfile(userCredential.user, name);
+src/pages/Auth.tsx:      const result = await signInWithPopup(auth, googleProvider);
+src/pages/Auth.tsx:      const onboardingComplete = await syncProfile(result.user);
+src/pages/Auth.tsx:      const result = await signInWithPopup(auth, appleProvider);
+src/pages/Auth.tsx:      const onboardingComplete = await syncProfile(result.user);
+src/pages/Auth.tsx:    if (!resetEmail) return;
+src/pages/Auth.tsx:      await sendPasswordResetEmail(auth, resetEmail);
+src/pages/Auth.tsx:          alt="Athlete Training"
+src/pages/Auth.tsx:        <AnimatePresence mode="wait">
+src/pages/Auth.tsx:          {!showEmailForm ? (
+src/pages/Auth.tsx:                onClick={() => setShowEmailForm(true)}
+src/pages/Auth.tsx:                Continue with Email
+src/pages/Auth.tsx:              key="email-form"
+src/pages/Auth.tsx:                onClick={() => setShowEmailForm(false)}
+src/pages/Auth.tsx:                  <label className="text-[8px] font-bold text-white/40 uppercase tracking-widest ml-2">Email Address</label>
+src/pages/Auth.tsx:                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+src/pages/Auth.tsx:                      type="email" 
+src/pages/Auth.tsx:                      value={email}
+src/pages/Auth.tsx:                      onChange={(e) => setEmail(e.target.value)}
+src/pages/Auth.tsx:              <span>Hyper-personalized training</span>
+src/pages/Auth.tsx:                <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Enter your email to receive a recovery link</p>
+src/pages/Auth.tsx:                    <Mail className="w-8 h-8 text-emerald-500" />
+src/pages/Auth.tsx:                    type="email" 
+src/pages/Auth.tsx:                    value={resetEmail}
+src/pages/Auth.tsx:                    onChange={(e) => setResetEmail(e.target.value)}
+src/pages/Home.tsx:import { WorkoutSession, Achievement, DailyLog, DailyWorkoutState } from '../types';
+src/pages/Home.tsx:import { calculateDailyNutrition, calculateTrendAdjustedNutrition } from '../services/nutritionEngine';
+src/pages/Home.tsx:import { useDailyLog } from '../hooks/useDailyLog';
+src/pages/Home.tsx:import { useDailyWorkout } from '../hooks/useDailyWorkout';
+src/pages/Home.tsx:import { ensureDailyWorkoutState, swapWorkoutStates } from '../services/workoutSynchronizationService';
+src/pages/Home.tsx:  const { log: todayLog, loading: logLoading, setLog } = useDailyLog();
+src/pages/Home.tsx:  const { workoutState, loading: workoutLoading } = useDailyWorkout();
+src/pages/Home.tsx:  const [calendarStates, setCalendarStates] = useState<DailyWorkoutState[]>([]);
+src/pages/Home.tsx:      collection(db, 'users', user.uid, 'daily_workout_states'),
+src/pages/Home.tsx:      setCalendarStates(snap.docs.map(d => d.data() as DailyWorkoutState));
+src/pages/Home.tsx:  // Daily Check-In form state
+src/pages/Home.tsx:      collection(db, 'users', user.uid, 'daily_logs'),
+src/pages/Home.tsx:      const logs = snap.docs.map(d => d.data() as DailyLog);
+src/pages/Home.tsx:    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/daily_logs`));
+src/pages/Home.tsx:  // Ensure Daily Workout State exists
+src/pages/Home.tsx:      ensureDailyWorkoutState(user.uid, new Date(), activeProgram);
+src/pages/Home.tsx:        collection(db, 'users', user.uid, 'daily_logs'),
+src/pages/Home.tsx:      const snap = await getDocs(logsQuery);
+src/pages/Home.tsx:      const logs = snap.docs.map(d => d.data() as DailyLog);
+src/pages/Home.tsx:      await updateProfile(updates);
+src/pages/Home.tsx:    let nutrition = calculateDailyNutrition(
+src/pages/Home.tsx:    const logData: Partial<DailyLog> = {
+src/pages/Home.tsx:      await setLog(logData);
+src/pages/Home.tsx:      await updateProfile({ weightKg: readinessForm.weight });
+src/pages/Home.tsx:      toast('Daily check-in logged. You can now generate your workout.', 'success');
+src/pages/Home.tsx:      toast('Failed to log readiness. Please try again.', 'error');
+src/pages/Home.tsx:      const logsSnap = await getDocs(query(
+src/pages/Home.tsx:        collection(db, 'users', user.uid, 'daily_logs'),
+src/pages/Home.tsx:      const sessionsSnap = await getDocs(query(
+src/pages/Home.tsx:      const session = await generateWorkout({
+src/pages/Home.tsx:        equipment: profile.availableEquipment as any || 'Full Gym',
+src/pages/Home.tsx:      // Update the Daily Workout State with generated blocks
+src/pages/Home.tsx:      const stateRef = doc(db, 'users', user.uid, 'daily_workout_states', todayStr);
+src/pages/Home.tsx:      await setDoc(stateRef, {
+src/pages/Home.tsx:        toast('Response was interrupted. Please try generating again.', 'error');
+src/pages/Home.tsx:        toast('Failed to generate your personalized workout. Please try again.', 'error');
+src/pages/Home.tsx:      await setLog({ 
+src/pages/Home.tsx:      toast('Smart rest day logged. Consistency maintained!', 'success');
+src/pages/Home.tsx:      toast('Failed to log smart rest.', 'error');
+src/pages/Home.tsx:      const success = await swapWorkoutStates(user.uid, new Date(), targetDate, activeProgram);
+src/pages/Home.tsx:        toast('Workout Swapped: Your training schedule has been updated.', 'success');
+src/pages/Home.tsx:        toast('Swap Failed: Could not swap workouts. Please try again.', 'error');
+src/pages/Home.tsx:      toast('Swap Failed: An error occurred during the swap.', 'error');
+src/pages/Home.tsx:      <main className="px-6 space-y-10 max-w-4xl mx-auto">
+src/pages/Home.tsx:        {/* 1. DAILY CHECK-IN (Top Priority) */}
+src/pages/Home.tsx:            <h3 className="font-display font-bold text-lg text-white uppercase tracking-tight italic">Daily Check-In</h3>
+src/pages/Home.tsx:                      Check-in required to authorize training session
+src/pages/Home.tsx:                      <span>Execute Daily Check-In</span>
+src/pages/Home.tsx:      </main>
+src/pages/Home.tsx:                <h3 className="text-3xl font-display font-black text-white uppercase italic tracking-tighter leading-none">Daily Check-In</h3>
+src/pages/Home.tsx:                    <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Drained</span>
+src/pages/Home.tsx:                  <span>Submit Daily Check-In</span>
+src/pages/Home.tsx:              {/* Selected Session Details */}
+src/pages/Home.tsx:              <AnimatePresence mode="wait">
+src/pages/Home.tsx:                    <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Select an active training day to swap</p>
+src/pages/Program.tsx:import { WorkoutSession, DailyLog, DailyWorkoutState } from '../types';
+src/pages/Program.tsx:import { ensureDailyWorkoutState } from '../services/workoutSynchronizationService';
+src/pages/Program.tsx:  const [dailyLogs, setDailyLogs] = useState<Record<string, DailyLog>>({});
+src/pages/Program.tsx:  const [monthLogs, setMonthLogs] = useState<Record<string, DailyLog>>({});
+src/pages/Program.tsx:  const [workoutStates, setWorkoutStates] = useState<Record<string, DailyWorkoutState>>({});
+src/pages/Program.tsx:      return 'Air Squat'; // Safe default from library
+src/pages/Program.tsx:      const result = await adaptProgramForNextWeek(profile, activeProgram);
+src/pages/Program.tsx:        toast("Program Optimized: Your coach has adjusted next week's training.", "success");
+src/pages/Program.tsx:      toast("There was an error adjusting your program. Please try again.", "error");
+src/pages/Program.tsx:    // Fetch daily logs for the month range
+src/pages/Program.tsx:      collection(db, 'users', user.uid, 'daily_logs'),
+src/pages/Program.tsx:      const logsMap: Record<string, DailyLog> = {};
+src/pages/Program.tsx:        const log = d.data() as DailyLog;
+src/pages/Program.tsx:      setDailyLogs(logsMap); // Sync with existing dailyLogs state
+src/pages/Program.tsx:    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/daily_logs`));
+src/pages/Program.tsx:    // Fetch Daily Workout States
+src/pages/Program.tsx:      collection(db, 'users', user.uid, 'daily_workout_states'),
+src/pages/Program.tsx:      const statesMap: Record<string, DailyWorkoutState> = {};
+src/pages/Program.tsx:        const state = d.data() as DailyWorkoutState;
+src/pages/Program.tsx:    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/daily_workout_states`));
+src/pages/Program.tsx:      ensureDailyWorkoutState(user.uid, day, activeProgram);
+src/pages/Program.tsx:        <main className="px-6 space-y-8">
+src/pages/Program.tsx:        </main>
+src/pages/Program.tsx:              <h1 className="text-3xl font-display font-black text-white uppercase tracking-tighter italic leading-none">Training Plan</h1>
+src/pages/Program.tsx:      <main className="px-6 space-y-8 max-w-7xl mx-auto">
+src/pages/Program.tsx:              <AnimatePresence mode="wait">
+src/pages/Program.tsx:                      Your coach can analyze this week's training and optimize next week for maximum results.
+src/pages/Program.tsx:      </main>
+src/pages/Onboarding.tsx:import { UserProfile, TrainingProgram } from '../types';
+src/pages/Onboarding.tsx:import { calculateDailyNutrition, calculateAdjustedNutrition } from '../services/nutritionEngine';
+src/pages/Onboarding.tsx:  { id: 'muscle_gain', name: 'Muscle Gain', icon: Dumbbell },
+src/pages/Onboarding.tsx:    primaryGoal: 'muscle_gain' as any,
+src/pages/Onboarding.tsx:    trainingDaysPerWeek: 3,
+src/pages/Onboarding.tsx:    trainingEnvironment: 'full_gym' as any,
+src/pages/Onboarding.tsx:    availableEquipment: [] as string[],
+src/pages/Onboarding.tsx:  // Pre-fill from profile if available
+src/pages/Onboarding.tsx:        if (profile.trainingEnvironment) updates.trainingEnvironment = profile.trainingEnvironment;
+src/pages/Onboarding.tsx:        if (profile.availableEquipment) updates.availableEquipment = profile.availableEquipment;
+src/pages/Onboarding.tsx:      await updateProfile({
+src/pages/Onboarding.tsx:        trainingEnvironment: formData.trainingEnvironment,
+src/pages/Onboarding.tsx:        availableEquipment: formData.availableEquipment,
+src/pages/Onboarding.tsx:      "Calculating training volume...",
+src/pages/Onboarding.tsx:      await new Promise(r => setTimeout(r, 1000));
+src/pages/Onboarding.tsx:      await new Promise(r => setTimeout(r, 2500 - elapsed));
+src/pages/Onboarding.tsx:    // preferredWorkoutDays based on trainingDaysPerWeek
+src/pages/Onboarding.tsx:    const preferredWorkoutDays = daysMap[formData.trainingDaysPerWeek] || [1, 3, 5];
+src/pages/Onboarding.tsx:      email: user!.email || '',
+src/pages/Onboarding.tsx:      trainingEnvironment: formData.trainingEnvironment,
+src/pages/Onboarding.tsx:      availableEquipment: formData.availableEquipment,
+src/pages/Onboarding.tsx:      await updateProfile(finalProfile);
+src/pages/Onboarding.tsx:      await setDoc(doc(db, 'users', user!.uid), finalProfile, { merge: true });
+src/pages/Onboarding.tsx:      const aiProgram = await generate12WeekProgram(finalProfile as UserProfile);
+src/pages/Onboarding.tsx:      await setDoc(doc(db, 'users', user!.uid, 'training_programs', aiProgram.programId), aiProgram);
+src/pages/Onboarding.tsx:      console.error('Error generating AI program:', error);
+src/pages/Onboarding.tsx:      // Fallback to a simpler program if AI fails
+src/pages/Onboarding.tsx:      await setDoc(doc(db, 'users', user!.uid, 'training_programs', fallbackProgramId), {
+src/pages/Onboarding.tsx:    // 3. Calculate Nutrition and save to today's daily log
+src/pages/Onboarding.tsx:    const baseNutrition = calculateDailyNutrition(finalProfile as UserProfile, formData.trainingDaysPerWeek, 0, 100);
+src/pages/Onboarding.tsx:    const logRef = doc(db, 'users', user!.uid, 'daily_logs', todayStr);
+src/pages/Onboarding.tsx:    await setDoc(logRef, {
+src/pages/Onboarding.tsx:      <main className="flex-1 max-w-md mx-auto w-full">
+src/pages/Onboarding.tsx:        <AnimatePresence mode="wait">
+src/pages/Onboarding.tsx:                  <label className="text-[10px] font-black text-white uppercase tracking-widest ml-2">Training Days Per Week</label>
+src/pages/Onboarding.tsx:                    <button onClick={() => setFormData({ ...formData, trainingDaysPerWeek: Math.max(1, formData.trainingDaysPerWeek - 1) })} className="p-2 bg-white/10 rounded-lg"><Minus className="w-4 h-4" /></button>
+src/pages/Onboarding.tsx:                    <span className="text-3xl font-display font-black text-white">{formData.trainingDaysPerWeek}</span>
+src/pages/Onboarding.tsx:                    <button onClick={() => setFormData({ ...formData, trainingDaysPerWeek: Math.min(7, formData.trainingDaysPerWeek + 1) })} className="p-2 bg-white/10 rounded-lg"><Plus className="w-4 h-4" /></button>
+src/pages/Onboarding.tsx:                  <label className="text-[10px] font-black text-white uppercase tracking-widest ml-2">Available Equipment</label>
+src/pages/Onboarding.tsx:                      const isSelected = formData.availableEquipment.includes(opt);
+src/pages/Onboarding.tsx:                              setFormData({ ...formData, availableEquipment: formData.availableEquipment.filter(e => e !== opt) });
+src/pages/Onboarding.tsx:                              setFormData({ ...formData, availableEquipment: [...formData.availableEquipment, opt] });
+src/pages/Onboarding.tsx:      </main>
+src/pages/Progress.tsx:import { DailyLog, WorkoutSession, BodyMetric, Achievement, DailyWorkoutState } from '../types';
+src/pages/Progress.tsx:  ResponsiveContainer, 
+src/pages/Progress.tsx:import { ensureDailyWorkoutState, swapWorkoutStates } from '../services/workoutSynchronizationService';
+src/pages/Progress.tsx:  const [readinessLogs, setReadinessLogs] = useState<DailyLog[]>([]);
+src/pages/Progress.tsx:  const [workoutStates, setWorkoutStates] = useState<DailyWorkoutState[]>([]);
+src/pages/Progress.tsx:  const [selectedDayDetail, setSelectedDayDetail] = useState<any | null>(null);
+src/pages/Progress.tsx:      const success = await swapWorkoutStates(user.uid, new Date(), targetDate, activeProgram);
+src/pages/Progress.tsx:        setSelectedDayDetail(null);
+src/pages/Progress.tsx:          description: "Failed to synchronize workout swap",
+src/pages/Progress.tsx:      collection(db, 'users', user.uid, 'daily_logs'),
+src/pages/Progress.tsx:    // Training Volume (Last 8 sessions or 12 weeks for heatmap)
+src/pages/Progress.tsx:      setReadinessLogs(snap.docs.map(d => ({ id: d.id, ...d.data() } as DailyLog)).reverse());
+src/pages/Progress.tsx:    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/daily_logs`));
+src/pages/Progress.tsx:    // Fetch Daily Workout States for heatmap
+src/pages/Progress.tsx:      collection(db, 'users', user.uid, 'daily_workout_states'),
+src/pages/Progress.tsx:      setWorkoutStates(snap.docs.map(d => d.data() as DailyWorkoutState));
+src/pages/Progress.tsx:    }, (err) => handleFirestoreError(err, OperationType.LIST, `users/${user.uid}/daily_workout_states`));
+src/pages/Progress.tsx:    // 1. Training Volume Chart (Last 8 weeks)
+src/pages/Progress.tsx:      <main className="px-6 space-y-8 max-w-4xl mx-auto">
+src/pages/Progress.tsx:          <AnimatePresence mode="wait">
+src/pages/Progress.tsx:                    <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Last 12 Weeks of Training</p>
+src/pages/Progress.tsx:                                  onClick={() => setSelectedDayDetail(dayData)}
+src/pages/Progress.tsx:                  <ResponsiveContainer width="100%" height="100%">
+src/pages/Progress.tsx:                      <YAxis hide domain={['dataMin - 2', 'dataMax + 2']} />
+src/pages/Progress.tsx:                  </ResponsiveContainer>
+src/pages/Progress.tsx:              {/* Training Volume Chart */}
+src/pages/Progress.tsx:                    <h3 className="font-display font-bold text-lg uppercase tracking-tight text-white">Weekly Training Volume (8w, {weightUnit})</h3>
+src/pages/Progress.tsx:                  <ResponsiveContainer width="100%" height="100%">
+src/pages/Progress.tsx:                  </ResponsiveContainer>
+src/pages/Progress.tsx:                  <ResponsiveContainer width="100%" height="100%">
+src/pages/Progress.tsx:                      <YAxis domain={[0, 100]} hide />
+src/pages/Progress.tsx:                      <ReferenceLine y={70} stroke="#f27d26" strokeDasharray="3 3" label={{ position: 'right', value: 'Fair', fill: '#f27d26', fontSize: 8, fontWeight: 'bold' }} />
+src/pages/Progress.tsx:                  </ResponsiveContainer>
+src/pages/Progress.tsx:        {/* Day Detail & Swap Modal */}
+src/pages/Progress.tsx:        {selectedDayDetail && (
+src/pages/Progress.tsx:                  <p className="text-[10px] text-white/40 font-black uppercase tracking-widest">{format(selectedDayDetail.date, 'EEEE, MMM d')}</p>
+src/pages/Progress.tsx:                  <h3 className="text-2xl font-display font-black text-white uppercase italic tracking-tighter tracking-tight">Mission Detail</h3>
+src/pages/Progress.tsx:                  onClick={() => setSelectedDayDetail(null)}
+src/pages/Progress.tsx:                      selectedDayDetail.status === 'completed' ? 'bg-brand-pink/20 text-brand-pink' :
+src/pages/Progress.tsx:                      selectedDayDetail.status === 'recovery' ? 'bg-emerald-500/20 text-emerald-500' :
+src/pages/Progress.tsx:                      selectedDayDetail.status === 'scheduled' ? 'bg-brand-gold/20 text-brand-gold' :
+src/pages/Progress.tsx:                      {selectedDayDetail.status.toUpperCase()}
+src/pages/Progress.tsx:                    <span className="text-xs font-black text-white uppercase italic">{selectedDayDetail.focus}</span>
+src/pages/Progress.tsx:                {isAfter(startOfDay(selectedDayDetail.date), startOfDay(new Date())) && (selectedDayDetail.status === 'scheduled' || selectedDayDetail.status === 'recovery') && (
+src/pages/Progress.tsx:                      onClick={() => handleSwapWorkout(selectedDayDetail.date)}
+src/pages/Progress.tsx:                {selectedDayDetail.status === 'completed' && (
+src/pages/Progress.tsx:                      <p className="text-sm font-display font-black text-white italic">{selectedDayDetail.volume} {weightUnit}</p>
+src/pages/Progress.tsx:                      <p className="text-sm font-display font-black text-white italic">{selectedDayDetail.duration}m</p>
+src/pages/Progress.tsx:    </main>
+src/pages/WorkoutPlayer.tsx:import { WorkoutSession, TrainingProgram, Achievement } from '../types';
+src/pages/WorkoutPlayer.tsx:import { useDailyLog } from '../hooks/useDailyLog';
+src/pages/WorkoutPlayer.tsx:  const { log: todayLog, loading: logLoading, setLog } = useDailyLog();
+src/pages/WorkoutPlayer.tsx:      return 'Air Squat'; // Safe default from library
+src/pages/WorkoutPlayer.tsx:          const docSnap = await getDoc(docRef);
+src/pages/WorkoutPlayer.tsx:          // Check today's daily_workout_state
+src/pages/WorkoutPlayer.tsx:          const stateRef = doc(db, 'users', user.uid, 'daily_workout_states', todayStr);
+src/pages/WorkoutPlayer.tsx:          const stateSnap = await getDoc(stateRef);
+src/pages/WorkoutPlayer.tsx:        equipment = profile.availableEquipment || ['Bodyweight'];
+src/pages/WorkoutPlayer.tsx:      const docRef = await addDoc(collection(db, 'users', user.uid, 'workout_sessions'), {
+src/pages/WorkoutPlayer.tsx:      toast('Failed to generate session', 'error');
+src/pages/WorkoutPlayer.tsx:        await setDoc(sessionRef, {
+src/pages/WorkoutPlayer.tsx:        const docRef = await addDoc(collection(db, 'users', user.uid, 'workout_sessions'), {
+src/pages/WorkoutPlayer.tsx:      await setDoc(sessionRef, {
+src/pages/WorkoutPlayer.tsx:      // 2. Save detailed performance for each exercise
+src/pages/WorkoutPlayer.tsx:          await setDoc(perfRef, {
+src/pages/WorkoutPlayer.tsx:      // 3. Update daily log
+src/pages/WorkoutPlayer.tsx:      await setLog({
+src/pages/WorkoutPlayer.tsx:      const prevSnap = await getDocs(prevQ);
+src/pages/WorkoutPlayer.tsx:        await updateStrengthBaselines(user.uid, updatedBaselines);
+src/pages/WorkoutPlayer.tsx:        await updateProfile({ 
+src/pages/WorkoutPlayer.tsx:      const newAchievements = await checkAndAwardAchievements(user.uid, completedSession);
+src/pages/WorkoutPlayer.tsx:      toast('Failed to save workout', 'error');
+src/pages/WorkoutPlayer.tsx:      const gainNode = audioCtx.createGain();
+src/pages/WorkoutPlayer.tsx:      oscillator.connect(gainNode);
+src/pages/WorkoutPlayer.tsx:      gainNode.connect(audioCtx.destination);
+src/pages/WorkoutPlayer.tsx:      gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+src/pages/WorkoutPlayer.tsx:      gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + (type === 'long' ? 0.5 : 0.1));
+src/pages/WorkoutPlayer.tsx:      console.warn("Audio context not available", e);
+src/pages/WorkoutPlayer.tsx:      // It's a temp session from daily_workout_states, save it first
+src/pages/WorkoutPlayer.tsx:        const docRef = await addDoc(collection(db, 'users', user.uid, 'workout_sessions'), {
+src/pages/WorkoutPlayer.tsx:        // Update daily_workout_state to in-progress
+src/pages/WorkoutPlayer.tsx:        const stateRef = doc(db, 'users', user.uid, 'daily_workout_states', todayStr);
+src/pages/WorkoutPlayer.tsx:        await setDoc(stateRef, { status: 'in-progress', sessionId: docRef.id }, { merge: true });
+src/pages/WorkoutPlayer.tsx:        toast('Failed to start session', 'error');
+src/pages/WorkoutPlayer.tsx:        title: "Where are you training?",
+src/pages/WorkoutPlayer.tsx:        <main className="flex-1 flex flex-col justify-center space-y-8">
+src/pages/WorkoutPlayer.tsx:        </main>
+src/pages/WorkoutPlayer.tsx:        <main className="flex-1 flex flex-col justify-center space-y-12">
+src/pages/WorkoutPlayer.tsx:            <span>Start Training</span>
+src/pages/WorkoutPlayer.tsx:        </main>
+src/pages/WorkoutPlayer.tsx:                placeholder="How did it feel? Any pain or wins?"
+src/pages/WorkoutPlayer.tsx:            <p className="text-[10px] font-black text-white/20 uppercase tracking-widest">Time Remaining</p>
+src/pages/WorkoutPlayer.tsx:              <p className="text-[8px] font-black text-brand-pink uppercase tracking-widest">Elite Training</p>
+src/pages/WorkoutPlayer.tsx:      {/* Main Content Area */}
+src/pages/WorkoutPlayer.tsx:      <main className="flex-1 flex flex-col relative overflow-hidden">
+src/pages/WorkoutPlayer.tsx:      </main>
+src/services/adaptationService.ts:import { GoogleGenAI, Type } from "@google/genai";
+src/services/adaptationService.ts:  TrainingProgram, 
+src/services/adaptationService.ts:  DailyLog,
+src/services/adaptationService.ts:Active push-pull straight leg raise,
+src/services/adaptationService.ts:Air squat - fast,
+src/services/adaptationService.ts:Air squat,
+src/services/adaptationService.ts:Arms straight overhead sit-up,
+src/services/adaptationService.ts:Band lateral raises,
+src/services/adaptationService.ts:Bicycle crunch - straight leg,
+src/services/adaptationService.ts:DB lateral raise,
+src/services/adaptationService.ts:Dumbbell front to lateral raise,
+src/services/adaptationService.ts:Hand & knee supported chainsaw row,
+src/services/adaptationService.ts:Hanging knee raise,
+src/services/adaptationService.ts:Hanging leg raise,
+src/services/adaptationService.ts:Heels elevated air squat,
+src/services/adaptationService.ts:Hollow high plank alternating leg raise,
+src/services/adaptationService.ts:Leg press calf raise,
+src/services/adaptationService.ts:Mountain climbers,
+src/services/adaptationService.ts:Mountain sliders,
+src/services/adaptationService.ts:Rainbow slam 20,
+src/services/adaptationService.ts:Rainbow slam,
+src/services/adaptationService.ts:Rainbowslam,
+src/services/adaptationService.ts:Raised quadruped hold,
+src/services/adaptationService.ts:Stairmaster,
+src/services/adaptationService.ts:Supine straight leg hip lift,
+src/services/adaptationService.ts:Wide stance air squat to calf raise,
+src/services/adaptationService.ts:const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+src/services/adaptationService.ts: * Implements the Weekly Adaptation AI logic.
+src/services/adaptationService.ts:  program: TrainingProgram
+src/services/adaptationService.ts:    const sessionsSnap = await getDocs(sessionsQuery);
+src/services/adaptationService.ts:    const logsRef = collection(db, 'users', profile.uid, 'daily_logs');
+src/services/adaptationService.ts:    const logsSnap = await getDocs(logsQuery);
+src/services/adaptationService.ts:    const lastWeekLogs = logsSnap.docs.map(d => d.data() as DailyLog);
+src/services/adaptationService.ts:Your goal is to adjust the athlete's training program for the UPCOMING week based on their performance, adherence, and recovery data from the PREVIOUS week.
+src/services/adaptationService.ts:- Equipment: ${profile.availableEquipment?.join(', ') || 'Full Gym'}
+src/services/adaptationService.ts:   - If RPE was high (>= 9.5) or reps missed: Maintain or slightly reduce weight/volume.
+src/services/adaptationService.ts:   - Maintain a balance of Squat, Hinge, Push, Pull (Horizontal/Vertical), Unilateral, and Core.
+src/services/adaptationService.ts:EVERY workout MUST contain exactly THREE blocks: Warmup, Strength, Conditioning.
+src/services/adaptationService.ts:    const response = await ai.models.generateContent({
+src/services/adaptationService.ts:        return 'Air Squat'; // Safe default from library
+src/services/adaptationService.ts:    const programRef = doc(db, 'users', profile.uid, 'training_programs', program.programId);
+src/services/adaptationService.ts:    await setDoc(programRef, { weeks: updatedWeeks }, { merge: true });
+src/services/adaptationService.ts:    await setDoc(adaptationRef, {
+src/services/workoutGenerationService.ts:import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
+src/services/workoutGenerationService.ts:  TrainingProgram, 
+src/services/workoutGenerationService.ts:Active push-pull straight leg raise,
+src/services/workoutGenerationService.ts:Air squat - fast,
+src/services/workoutGenerationService.ts:Air squat,
+src/services/workoutGenerationService.ts:Arms straight overhead sit-up,
+src/services/workoutGenerationService.ts:Band lateral raises,
+src/services/workoutGenerationService.ts:Bicycle crunch - straight leg,
+src/services/workoutGenerationService.ts:DB lateral raise,
+src/services/workoutGenerationService.ts:Dumbbell front to lateral raise,
+src/services/workoutGenerationService.ts:Hand & knee supported chainsaw row,
+src/services/workoutGenerationService.ts:Hanging knee raise,
+src/services/workoutGenerationService.ts:Hanging leg raise,
+src/services/workoutGenerationService.ts:Heels elevated air squat,
+src/services/workoutGenerationService.ts:Hollow high plank alternating leg raise,
+src/services/workoutGenerationService.ts:Leg press calf raise,
+src/services/workoutGenerationService.ts:Mountain climbers,
+src/services/workoutGenerationService.ts:Mountain sliders,
+src/services/workoutGenerationService.ts:Rainbow slam 20,
+src/services/workoutGenerationService.ts:Rainbow slam,
+src/services/workoutGenerationService.ts:Rainbowslam,
+src/services/workoutGenerationService.ts:Raised quadruped hold,
+src/services/workoutGenerationService.ts:Stairmaster,
+src/services/workoutGenerationService.ts:Supine straight leg hip lift,
+src/services/workoutGenerationService.ts:Wide stance air squat to calf raise,
+src/services/workoutGenerationService.ts:const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+src/services/workoutGenerationService.ts:  program: TrainingProgram;
+src/services/workoutGenerationService.ts:Your goal is to provide finalized, adaptive training and nutrition for TODAY based on the athlete's current readiness, program phase, and goals.
+src/services/workoutGenerationService.ts:EVERY workout MUST contain exactly THREE blocks: Warmup, Strength, Conditioning.
+src/services/workoutGenerationService.ts:OUTPUT CONSTRAINTS:
+src/services/workoutGenerationService.ts:- block_instructions: Detailed protocol (e.g., "Full recovery between sets" or "Continuous movement").
+src/services/workoutGenerationService.ts:      const response = await ai.models.generateContent({
+src/services/workoutGenerationService.ts:              training_tier: { type: Type.STRING },
+src/services/workoutGenerationService.ts:            required: ["readiness_score", "training_tier", "session_type", "blocks"]
+src/services/workoutGenerationService.ts:          return 'Air Squat'; // Safe default from library
+src/services/workoutGenerationService.ts:        sessionFocus: data.session_type || 'General Training',
+src/services/workoutGenerationService.ts:  throw new Error("Failed to generate workout");
+src/services/workoutSynchronizationService.ts:import { DailyWorkoutState, TrainingProgram, DailyLog } from '../types';
+src/services/workoutSynchronizationService.ts: * Ensures a DailyWorkoutState exists for the given date.
+src/services/workoutSynchronizationService.ts:export const ensureDailyWorkoutState = async (uid: string, date: Date, activeProgram: TrainingProgram | null): Promise<DailyWorkoutState | null> => {
+src/services/workoutSynchronizationService.ts:  const stateRef = doc(db, 'users', uid, 'daily_workout_states', dateStr);
+src/services/workoutSynchronizationService.ts:    const snap = await getDoc(stateRef);
+src/services/workoutSynchronizationService.ts:      const existingState = snap.data() as DailyWorkoutState;
+src/services/workoutSynchronizationService.ts:      collection(db, 'users', uid, 'daily_logs'),
+src/services/workoutSynchronizationService.ts:    const logsSnap = await getDocs(logsQuery);
+src/services/workoutSynchronizationService.ts:    const recentLogs = logsSnap.docs.map(d => d.data() as DailyLog);
+src/services/workoutSynchronizationService.ts:      // Try by day number if AI provided it
+src/services/workoutSynchronizationService.ts:      const isTrainingDay = dayConfig && dayConfig.sessionType.toLowerCase() !== 'rest';
+src/services/workoutSynchronizationService.ts:      if (!session && isTrainingDay && weekData.sessions.length > 0) {
+src/services/workoutSynchronizationService.ts:        const trainingDays = Object.keys(activeProgram.weeklySchedule)
+src/services/workoutSynchronizationService.ts:        const trainingDayIndex = trainingDays.indexOf(parseInt(dayOfWeek));
+src/services/workoutSynchronizationService.ts:        // Cycle through available sessions if we have fewer than training days
+src/services/workoutSynchronizationService.ts:        const sessionIndex = trainingDayIndex % weekData.sessions.length;
+src/services/workoutSynchronizationService.ts:    const newState: DailyWorkoutState = {
+src/services/workoutSynchronizationService.ts:      workoutTitle: isRestDay ? (forcedRest ? 'Recovery Protocol' : 'Rest Day') : (session?.sessionFocus || dayConfig?.sessionFocus || 'Training'),
+src/services/workoutSynchronizationService.ts:    await setDoc(stateRef, newState);
+src/services/workoutSynchronizationService.ts:    handleFirestoreError(error, OperationType.WRITE, `users/${uid}/daily_workout_states/${dateStr}`);
+src/services/workoutSynchronizationService.ts:export const swapWorkoutStates = async (uid: string, date1: Date, date2: Date, activeProgram: TrainingProgram | null) => {
+src/services/workoutSynchronizationService.ts:    const state1 = await ensureDailyWorkoutState(uid, date1, activeProgram);
+src/services/workoutSynchronizationService.ts:    const state2 = await ensureDailyWorkoutState(uid, date2, activeProgram);
+src/services/workoutSynchronizationService.ts:    const newState1: DailyWorkoutState = {
+src/services/workoutSynchronizationService.ts:    const newState2: DailyWorkoutState = {
+src/services/workoutSynchronizationService.ts:    batch.set(doc(db, 'users', uid, 'daily_workout_states', date1Str), newState1);
+src/services/workoutSynchronizationService.ts:    batch.set(doc(db, 'users', uid, 'daily_workout_states', date2Str), newState2);
+src/services/workoutSynchronizationService.ts:    await batch.commit();
+src/services/workoutSynchronizationService.ts:    handleFirestoreError(error, OperationType.WRITE, `users/${uid}/daily_workout_states/swap`);
+src/services/gemini.ts:import { GoogleGenAI, GenerateContentResponse, Type } from "@google/genai";
+src/services/gemini.ts:const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+src/services/gemini.ts:    4. If you are UNCERTAIN about a food item (e.g., it's covered in sauce, looks like multiple things, or is partially hidden), provide your best guess for the name and macros, but ALSO include a specific, helpful question in the "question" field to help the user identify it (e.g., "Is this grilled chicken or tofu?").
+src/services/gemini.ts:          "question": { "type": "string", "description": "Optional question to ask the user if identification is uncertain." }
+src/services/gemini.ts:    const response = await ai.models.generateContent({
+src/services/gemini.ts:    - INTERNAL THREAD CONSISTENCY: If the user asks for the same advice again or stays on the same topic within the same hour, DO NOT give a generic "new" response. ACKNOLWEDGE what you already said (e.g., "Like I told you 20 minutes ago..."). Build on the advice. If they repeat themselves, it means they are stuck or haven't taken action yet—push them harder.
+src/services/gemini.ts:    - Reference specific advice you gave in previous turns to maintain a unique, one-on-one coaching relationship.
+src/services/gemini.ts:    - BE DIRECT: Get straight to the point. If the athlete asks for an adjustment, give it immediately.
+src/services/gemini.ts:    - Remaining Macros: ${context.remaining?.calories || 0} kcal, P: ${context.remaining?.protein || 0}g, C: ${context.remaining?.carbs || 0}g, F: ${context.remaining?.fat || 0}g
+src/services/gemini.ts:    4. NO BOLDING: Use plain text only. No markdown bolding (**text**). Use caps for emphasis if needed.
+src/services/gemini.ts:    const response = await ai.models.generateContent({
+src/services/gemini.ts:        if (lowerCategory.includes('injury') || lowerContent.includes('pain') || lowerContent.includes('hurt')) {
+src/services/gemini.ts:            await setDoc(profileRef, cleanUpdates, { merge: true });
+src/services/workoutEngine.ts:  TrainingProgram, 
+src/services/workoutEngine.ts:  DailyLog,
+src/services/workoutEngine.ts: * Generates an adjusted workout session based on multiple constraints.
+src/services/workoutEngine.ts:  program: TrainingProgram,
+src/services/workoutEngine.ts:  availableEquipment: string[],
+src/services/workoutEngine.ts:  availableTime: number,
+src/services/workoutEngine.ts:  dailyLog?: DailyLog
+src/services/workoutEngine.ts:  const safeEquipment = availableEquipment || [];
+src/services/workoutEngine.ts:  const aiSession = currentWeekData?.sessions.find(s => s.dayName === dayName);
+src/services/workoutEngine.ts:    // Start with AI blocks if available
+src/services/workoutEngine.ts:    let baseBlocks = aiSession?.blocks || [];
+src/services/workoutEngine.ts:    if (availableTime <= 30 && aiSession?.shortVersion && aiSession.shortVersion.length > 0) {
+src/services/workoutEngine.ts:      baseBlocks = aiSession.shortVersion;
+src/services/workoutEngine.ts:    } else if (safeEquipment.length === 1 && safeEquipment[0] === 'Bodyweight' && aiSession?.bodyweightVersion && aiSession.bodyweightVersion.length > 0) {
+src/services/workoutEngine.ts:      baseBlocks = aiSession.bodyweightVersion;
+src/services/workoutEngine.ts:    // Further adjust based on specific daily log metrics if available
+src/services/workoutEngine.ts:    if (dailyLog) {
+src/services/workoutEngine.ts:      if (dailyLog.sorenessLevel <= 2) {
+src/services/workoutEngine.ts:      if (dailyLog.energyLevel <= 2) {
+src/services/workoutEngine.ts:      if (dailyLog.stressLevel <= 2) {
+src/services/workoutEngine.ts:            primaryMuscleGroup: ex.primaryMuscleGroup || ex.type, // Use ex.primaryMuscleGroup if available, fallback to ex.type
+src/services/workoutEngine.ts:  // 3. Filter by Available Equipment & Substitute
+src/services/workoutEngine.ts:          // If direct name replacement fails, try generic patterns
+src/services/workoutEngine.ts:export const generateInitialProgram = (profile: UserProfile): TrainingProgram => {
+src/services/workoutEngine.ts:  const initialProgram: TrainingProgram = {
+src/services/workoutEngine.ts:        exerciseId: 'dumbbell_lateral_raise',
+src/services/workoutEngine.ts:        exerciseName: 'Dumbbell lateral raise',
+src/services/workoutEngine.ts:        exerciseId: 'mountain_climbers',
+src/services/workoutEngine.ts:        exerciseName: 'Mountain climbers',
+src/services/workoutEngine.ts:  // Fallback chain
+src/services/seed.ts:      'Press the weights overhead until arms are straight.',
+src/services/seed.ts:      'Maintain a neutral spine throughout.'
+src/services/seed.ts:  const exSnap = await getDocs(query(collection(db, 'exercise_library'), limit(1)));
+src/services/seed.ts:      await addDoc(collection(db, 'exercise_library'), ex);
+src/services/offService.ts:    const response = await fetch(
+src/services/offService.ts:    return await response.json();
+src/services/offService.ts:    const response = await fetch(`/api/off/product/${barcode}`);
+src/services/offService.ts:    if (!response.ok) throw new Error('Failed to fetch product by barcode');
+src/services/offService.ts:    const data = await response.json();
+src/services/offService.ts:  // Prefer serving values if available, otherwise fallback to 100g
+src/services/progressiveOverloadEngine.ts:    // - If RPE 7–8 maintain or add reps
+src/services/progressiveOverloadEngine.ts:      // Maintain weight, maybe add reps (handled in session generation)
+src/services/progressiveOverloadEngine.ts:    await setDoc(userRef, {
+src/services/nutritionEngine.ts:import { UserProfile, DailyLog } from '../types';
+src/services/nutritionEngine.ts: * Returns the activity multiplier based on training frequency and daily steps.
+src/services/nutritionEngine.ts:  trainingDaysPerWeek: number,
+src/services/nutritionEngine.ts:  averageDailySteps: number = 0
+src/services/nutritionEngine.ts:  // Training frequency adjustments
+src/services/nutritionEngine.ts:  if (trainingDaysPerWeek >= 5) multiplier = 1.725;
+src/services/nutritionEngine.ts:  else if (trainingDaysPerWeek >= 3) multiplier = 1.55;
+src/services/nutritionEngine.ts:  else if (trainingDaysPerWeek >= 1) multiplier = 1.375;
+src/services/nutritionEngine.ts:  if (averageDailySteps > 10000) multiplier += 0.1;
+src/services/nutritionEngine.ts:  else if (averageDailySteps > 7500) multiplier += 0.05;
+src/services/nutritionEngine.ts: * Calculates the base daily nutrition targets before readiness adjustments.
+src/services/nutritionEngine.ts:export const calculateDailyNutrition = (
+src/services/nutritionEngine.ts:  trainingDaysPerWeek: number,
+src/services/nutritionEngine.ts:  averageDailySteps: number,
+src/services/nutritionEngine.ts:  const activityMultiplier = getActivityMultiplier(trainingDaysPerWeek, averageDailySteps);
+src/services/nutritionEngine.ts:  if (profile.primaryGoal === 'muscle_gain') {
+src/services/nutritionEngine.ts:    tdee += 300; // Slightly higher surplus for muscle gain focus
+src/services/nutritionEngine.ts:    tdee += 100; // Performance focus usually means slight surplus or maintenance
+src/services/nutritionEngine.ts:  // Readiness Adjustment (as requested in calculateDailyNutrition)
+src/services/nutritionEngine.ts:  } else if (profile.primaryGoal === 'muscle_gain') {
+src/services/nutritionEngine.ts:    if (weeklyChangeKg < 0.1) { // Gaining slower than ~0.2lbs/week
+src/services/nutritionEngine.ts: * Calculates remaining macros for the day.
+src/services/nutritionEngine.ts:export const getRemainingMacros = (
+src/services/achievementEngine.ts:import { WorkoutSession, Achievement, DailyLog } from '../types';
+src/services/achievementEngine.ts: * Compares current performance against historical data.
+src/services/achievementEngine.ts:    const historicalSnap = await getDocs(historicalSessionsQuery);
+src/services/achievementEngine.ts:    // 2. Step Streak (Last 7 daily logs)
+src/services/achievementEngine.ts:      collection(db, 'users', userId, 'daily_logs'),
+src/services/achievementEngine.ts:    const logsSnap = await getDocs(logsQuery);
+src/services/achievementEngine.ts:    const logs = logsSnap.docs.map(d => d.data() as DailyLog);
+src/services/achievementEngine.ts:        const existingStreakSnap = await getDocs(existingStreakQuery);
+src/services/achievementEngine.ts:      await addDoc(collection(db, 'users', userId, 'achievements'), ach);
+src/services/programService.ts:import { GoogleGenAI, Type } from "@google/genai";
+src/services/programService.ts:import { UserProfile, TrainingProgram, ProgramWeek, ProgramSession, ProgramExercise, ProgramBlock } from "../types";
+src/services/programService.ts:const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+src/services/programService.ts:Active push-pull straight leg raise,
+src/services/programService.ts:Air squat - fast,
+src/services/programService.ts:Air squat,
+src/services/programService.ts:Arms straight overhead sit-up,
+src/services/programService.ts:Band lateral raises,
+src/services/programService.ts:Bicycle crunch - straight leg,
+src/services/programService.ts:DB lateral raise,
+src/services/programService.ts:Dumbbell front to lateral raise,
+src/services/programService.ts:Hand & knee supported chainsaw row,
+src/services/programService.ts:Hanging knee raise,
+src/services/programService.ts:Hanging leg raise,
+src/services/programService.ts:Heels elevated air squat,
+src/services/programService.ts:Hollow high plank alternating leg raise,
+src/services/programService.ts:Leg press calf raise,
+src/services/programService.ts:Mountain climbers,
+src/services/programService.ts:Mountain sliders,
+src/services/programService.ts:Rainbow slam 20,
+src/services/programService.ts:Rainbow slam,
+src/services/programService.ts:Rainbowslam,
+src/services/programService.ts:Raised quadruped hold,
+src/services/programService.ts:Stairmaster,
+src/services/programService.ts:Supine straight leg hip lift,
+src/services/programService.ts:Wide stance air squat to calf raise,
+src/services/programService.ts:export async function generate12WeekProgram(user: UserProfile): Promise<TrainingProgram> {
+src/services/programService.ts:You are a master performance coach, strength coach, sports scientist, and nutritionist that generates fully adaptive training and nutrition programs for users.
+src/services/programService.ts:Generate a comprehensive 12-week training program and baseline nutrition profile for the following athlete.
+src/services/programService.ts:- Training Frequency: ${user.preferredWorkoutDays.length} days/week
+src/services/programService.ts:- Preferred Training Days: ${user.preferredWorkoutDays.join(', ')}
+src/services/programService.ts:- Available Equipment: ${user.availableEquipment.join(', ')}
+src/services/programService.ts:1. Training Schedule:
+src/services/programService.ts:   - You MUST generate a workout for EVERY day specified in the "Preferred Training Days" list.
+src/services/programService.ts:   - NEVER default to Sunday (or any other day) as a rest day if it is in the "Preferred Training Days" list.
+src/services/programService.ts:   - Every week in the 12-week plan MUST have exactly the same number of sessions as the Training Frequency.
+src/services/programService.ts:2. Training Goals:
+src/services/programService.ts:   - Weight Loss: Prioritize caloric expenditure, metabolic conditioning, and training density.
+src/services/programService.ts:   - Muscle Gain: Prioritize hypertrophy volume, progressive overload, and compound lifts.
+src/services/programService.ts:   - EVERY workout MUST contain exactly THREE blocks: Warmup, Strength, Conditioning. No more, no less.
+src/services/programService.ts:   - Total Daily Energy Expenditure (TDEE): Calculate based on BMR and estimated activity/training.
+src/services/programService.ts:     * Muscle Gain: TDEE + surplus (200-500 kcal).
+src/services/programService.ts:     * Sports Performance: Maintenance to slight surplus.
+src/services/programService.ts:     * Carbs: Remaining calories.
+src/services/programService.ts:  "audit_log": ["string explaining design choices"],
+src/services/programService.ts:    "trainingDay": { "calories": number, "proteinG": number, "carbsG": number, "fatG": number, "note": "string" },
+src/services/programService.ts:      "Normal": { "intensityModifier": 1.0, "volumeModifier": 1.0, "conditioningModifier": 1.0, "rpeTarget": "7-8", "description": "Baseline training" },
+src/services/programService.ts:  const response = await ai.models.generateContent({
+src/services/programService.ts:              trainingDay: {
+src/services/programService.ts:      return 'Air Squat'; // Safe default from library
+src/services/programService.ts:  const program: TrainingProgram = {
+src/services/readinessEngine.ts:import { DailyLog, UserProfile } from '../types';
+src/services/readinessEngine.ts:  status: DailyLog['readinessStatus'];
+src/services/readinessEngine.ts: * Calculates the readiness score based on tailored metrics.
+src/services/readinessEngine.ts: * @param profile - User profile for tailoring
+src/services/readinessEngine.ts:  let status: DailyLog['readinessStatus'] = 'Stable';
+src/services/readinessEngine.ts: * Returns training adjustments based on the readiness score.
+src/services/readinessEngine.ts:      return 'Drained';
+src/services/fdcService.ts:    const response = await fetch(`${BASE_URL}/foods/search?api_key=${FDC_API_KEY}`, {
+src/services/fdcService.ts:    return await response.json();
+src/services/fdcService.ts:export const getFoodDetails = async (fdcId: number): Promise<any> => {
+src/services/fdcService.ts:    const response = await fetch(`${BASE_URL}/food/${fdcId}?api_key=${FDC_API_KEY}`);
+src/services/fdcService.ts:    if (!response.ok) throw new Error('Failed to fetch food details');
+src/services/fdcService.ts:    return await response.json();
+src/services/fdcService.ts:    console.error('Error fetching food details:', error);
+src/services/exerciseSeeder.ts:import { GoogleGenAI, Type } from "@google/genai";
+src/services/exerciseSeeder.ts:const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+src/services/exerciseSeeder.ts:  const snap = await getDocs(q);
+src/services/exerciseSeeder.ts:  await batch.commit();
+src/services/exerciseSeeder.ts:    const response = await ai.models.generateContent({
+src/services/exerciseSeeder.ts:        await new Promise(resolve => setTimeout(resolve, delay));
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/active push-pull straight leg raise.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/air squat - fast.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/air squat.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/arms straight overhead situp.mov",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/band lateral raises.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/bicycle crunch - straight leg.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/db lateral raise.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/dumbbell front to lateral raise.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/hand & knee supported chainsaw row.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/hanging knee raise.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/hanging leg raise.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/heels elevated air squat.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/hollow high plank alternating leg raise.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/leg press calf raise.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/mountain climbers.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/mountain sliders.mov",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/rainbow slam 20.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/rainbow slam.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/raised quadruped hold.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/stairmaster.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/supine straight leg hip lift.mp4",
+src/services/exerciseSeeder.ts:  "https://storage.googleapis.com/exercise-videos-fit/wide stance air squat to calf raise.mp4",
+src/services/exerciseSeeder.ts:  if (n.includes('shoulder') || n.includes('lateral raise') || n.includes('arnold') || 
+src/services/exerciseSeeder.ts:      n.includes('core') || n.includes('ab') || n.includes('leg raise') || n.includes('deadbug') || 
+src/services/exerciseSeeder.ts:      n.includes('toe touch') || n.includes('knee raise') || n.includes('flutter') || n.includes('scissor') || 
+src/services/exerciseSeeder.ts:      n.includes('farmer') || n.includes('waiter') || n.includes('climber') || n.includes('toes to bar') ||
+src/services/exerciseSeeder.ts:  if (n.includes('treadmill') || n.includes('bike') || n.includes('ski erg') || n.includes('stairmaster') || n.includes('skierg')) return 'Cardio Machines';
+src/services/exerciseSeeder.ts:      n.includes('ski') || n.includes('stairmaster') || n.includes('skierg') || n.includes('rope') || 
+src/services/exerciseSeeder.ts:      n.includes('jack') || n.includes('mountain climber')) return 'Conditioning';
+src/services/exerciseSeeder.ts:        const existingDoc = await getDoc(docRef);
+src/services/exerciseSeeder.ts:          enrichedData = await enrichExercise(name);
+src/services/exerciseSeeder.ts:            'Maintain a stable core throughout the movement.',
+src/services/exerciseSeeder.ts:        await setDoc(docRef, entry);
+src/services/exerciseSeeder.ts:    await Promise.all(promises);
+src/services/exerciseSeeder.ts:      await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
+src/services/exerciseSeeder.ts:  const snap = await getDocs(libraryRef);
+src/services/exerciseSeeder.ts:        console.error(`Failed to re-encode URL for ${name}:`, e);
+src/services/exerciseSeeder.ts:    await setDoc(d.ref, updateData, { merge: true });
+src/components/BottomNav.tsx:  Brain, 
+src/components/BottomNav.tsx:    { name: 'Coach', icon: Brain, path: '/coach' },
+src/components/MealPhotoAnalyzer.tsx:      const stream = await navigator.mediaDevices.getUserMedia({ 
+src/components/MealPhotoAnalyzer.tsx:      const results = await analyzeMealPhotos(images);
+src/components/MealPhotoAnalyzer.tsx:      console.error("Analysis failed:", err);
+src/components/MealPhotoAnalyzer.tsx:      setError("Failed to analyze meal. Please try again.");
+src/components/ExerciseMedia.tsx:          const exSnap = await getDoc(exRef);
+src/components/ExerciseMedia.tsx:          .replace(/^(barbell|dumbbell|db|bb|kb|kettlebell|weighted|bodyweight|air|assisted|supported|single\s+arm|single\s+leg|alternating|alt|seated|standing|lying|prone|supine|banded|band|resistance\s+band|cable|suspension|ring|stability\s+ball|medicine\s+ball|mb|slam\s+ball|wall\s+ball|box|bench|floor|smith\s+machine|machine|iso|isometric|isometric\s+isometric)\s+/g, '')
+src/components/ExerciseMedia.tsx:          const fuzzySnap = await getDoc(fuzzyRef);
+src/components/ExerciseMedia.tsx:          const snapName = await getDocs(qName);
+src/components/ExerciseMedia.tsx:          // If mp4 guess failed, try mov
+src/components/Logo.tsx:        className={`${sizeClasses[size]} w-auto object-contain`}
+src/types.ts:  email: string;
+src/types.ts:  primaryGoal: 'muscle_gain' | 'weight_loss' | 'sports_performance';
+src/types.ts:  availableEquipment: string[];
+src/types.ts:  trainingEnvironment: 'full_gym' | 'home_gym' | 'outdoor' | 'mixed';
+src/types.ts:export interface DailyLog {
+src/types.ts:export interface DailyWorkoutState {
+src/types.ts:export interface TrainingProgram {
+src/types.ts:  phases: TrainingPhase[];
+src/types.ts:  trainingDay: NutritionTarget;
+src/types.ts:export interface TrainingPhase {
+src/types.ts:  thumbnailUrl?: string;
+src/types.ts:  thumbnailUrl?: string;
+src/firebase.ts:    email?: string;
+src/firebase.ts:    emailVerified?: boolean;
+src/firebase.ts:      email: string | null;
+src/firebase.ts:      email: auth.currentUser?.email || undefined,
+src/firebase.ts:      emailVerified: auth.currentUser?.emailVerified,
+src/firebase.ts:        email: provider.email,
+src/lib/utils.ts:import { twMerge } from 'tailwind-merge';
+src/index.css:@import "tailwindcss";
+src/App.tsx:      <AnimatePresence mode="wait">

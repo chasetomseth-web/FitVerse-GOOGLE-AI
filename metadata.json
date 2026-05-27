@@ -1,0 +1,9 @@
+{
+  "name": "FitVerse",
+  "description": "Premium performance coaching and tracking platform with personalized training programs and readiness monitoring.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
