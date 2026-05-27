@@ -59,8 +59,9 @@ export const useDailyWorkout = (dateStr?: string) => {
             }
           }
         }
-      )
-      .subscribe();
+      );
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);

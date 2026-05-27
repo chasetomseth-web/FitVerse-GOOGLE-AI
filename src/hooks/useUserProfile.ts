@@ -52,8 +52,9 @@ export const useUserProfile = () => {
             setProfile(payload.new as UserProfile);
           }
         }
-      )
-      .subscribe();
+      );
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);

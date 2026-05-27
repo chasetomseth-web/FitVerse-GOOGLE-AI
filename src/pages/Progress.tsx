@@ -186,33 +186,39 @@ export const Progress: React.FC = () => {
     // Subscribe to real-time updates
     const readinessChannel = supabase
       .channel(`daily_logs:${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_logs', filter: `user_id=eq.${user.id}` }, fetchData)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_logs', filter: `user_id=eq.${user.id}` }, fetchData);
+
+    readinessChannel.subscribe();
 
     const workoutsChannel = supabase
       .channel(`workout_sessions_progress:${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'workout_sessions', filter: `user_id=eq.${user.id}` }, fetchData)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workout_sessions', filter: `user_id=eq.${user.id}` }, fetchData);
+
+    workoutsChannel.subscribe();
 
     const weightChannel = supabase
       .channel(`body_metrics:${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'body_metrics', filter: `user_id=eq.${user.id}` }, fetchData)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'body_metrics', filter: `user_id=eq.${user.id}` }, fetchData);
+
+    weightChannel.subscribe();
 
     const achievementsChannel = supabase
       .channel(`achievements:${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'achievements', filter: `user_id=eq.${user.id}` }, fetchData)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'achievements', filter: `user_id=eq.${user.id}` }, fetchData);
+
+    achievementsChannel.subscribe();
 
     const adaptationsChannel = supabase
       .channel(`weekly_adaptations:${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_adaptations', filter: `user_id=eq.${user.id}` }, fetchData)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_adaptations', filter: `user_id=eq.${user.id}` }, fetchData);
+
+    adaptationsChannel.subscribe();
 
     const statesChannel = supabase
       .channel(`daily_workout_states_progress:${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_workout_states', filter: `user_id=eq.${user.id}` }, fetchData)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_workout_states', filter: `user_id=eq.${user.id}` }, fetchData);
+
+    statesChannel.subscribe();
 
     return () => {
       supabase.removeChannel(readinessChannel);

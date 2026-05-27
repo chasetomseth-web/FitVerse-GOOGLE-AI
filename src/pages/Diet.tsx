@@ -107,8 +107,9 @@ export const Diet: React.FC = () => {
       .channel(`body_metrics:${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'body_metrics', filter: `user_id=eq.${user.id}` }, () => {
         fetchMetrics();
-      })
-      .subscribe();
+      });
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);

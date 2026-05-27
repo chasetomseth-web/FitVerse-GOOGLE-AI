@@ -59,8 +59,9 @@ export const useDailyLog = () => {
             }
           }
         }
-      )
-      .subscribe();
+      );
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);

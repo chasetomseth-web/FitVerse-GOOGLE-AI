@@ -53,8 +53,9 @@ export const useWorkoutSession = (sessionId: string | undefined) => {
             setSession(payload.new as WorkoutSession);
           }
         }
-      )
-      .subscribe();
+      );
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);

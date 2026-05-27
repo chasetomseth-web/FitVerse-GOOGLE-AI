@@ -99,8 +99,9 @@ export const Home: React.FC = () => {
       .channel(`daily_workout_states:${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_workout_states', filter: `user_id=eq.${user.id}` }, () => {
         fetchStates();
-      })
-      .subscribe();
+      });
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -178,8 +179,9 @@ export const Home: React.FC = () => {
       .channel(`daily_logs:${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_logs', filter: `user_id=eq.${user.id}` }, () => {
         fetchWeightStats();
-      })
-      .subscribe();
+      });
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -321,8 +323,9 @@ export const Home: React.FC = () => {
       .channel(`achievements:${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'achievements', filter: `user_id=eq.${user.id}` }, () => {
         fetchAchievements();
-      })
-      .subscribe();
+      });
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -554,19 +557,31 @@ export const Home: React.FC = () => {
     return sessions;
   }, [activeProgram]);
 
+  // Show loading state while fetching critical data
+  if (!profile || profileLoading || logLoading) {
+    return (
+      <div className="min-h-screen bg-brand-black flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-4 border-brand-pink/20 border-t-brand-pink rounded-full animate-spin mx-auto" />
+          <p className="text-white/40 text-xs font-bold uppercase tracking-widest">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-brand-black pb-32">
       <header className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div 
+            <div
               onClick={() => navigate('/profile')}
               className="w-12 h-12 rounded-2xl bg-brand-pink/10 border border-brand-pink/20 flex items-center justify-center overflow-hidden cursor-pointer hover:scale-105 transition-transform"
             >
-              {profile?.photoURL ? (
-                <img 
-                  src={profile.photoURL} 
-                  alt={profile.name} 
+              {profile?.photo_url ? (
+                <img
+                  src={profile.photo_url}
+                  alt={profile.name}
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
                 />

@@ -159,18 +159,21 @@ export const Program: React.FC = () => {
     // Subscribe to real-time updates
     const workoutChannel = supabase
       .channel(`workout_sessions:${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'workout_sessions', filter: `user_id=eq.${user.id}` }, fetchData)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'workout_sessions', filter: `user_id=eq.${user.id}` }, fetchData);
+
+    workoutChannel.subscribe();
 
     const logsChannel = supabase
       .channel(`daily_logs:${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_logs', filter: `user_id=eq.${user.id}` }, fetchData)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_logs', filter: `user_id=eq.${user.id}` }, fetchData);
+
+    logsChannel.subscribe();
 
     const statesChannel = supabase
       .channel(`daily_workout_states:${user.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_workout_states', filter: `user_id=eq.${user.id}` }, fetchData)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_workout_states', filter: `user_id=eq.${user.id}` }, fetchData);
+
+    statesChannel.subscribe();
 
     return () => {
       supabase.removeChannel(workoutChannel);

@@ -152,8 +152,9 @@ export const Library: React.FC = () => {
       .channel('exercise_library')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'exercise_library' }, () => {
         fetchExercises();
-      })
-      .subscribe();
+      });
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);

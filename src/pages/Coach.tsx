@@ -71,8 +71,9 @@ export const Coach: React.FC = () => {
       .channel(`body_metrics:${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'body_metrics', filter: `user_id=eq.${user.id}` }, () => {
         fetchWeightTrend();
-      })
-      .subscribe();
+      });
+
+    metricsChannel.subscribe();
 
     // Fetch today's workout for context
     const fetchWorkout = async () => {
@@ -104,8 +105,9 @@ export const Coach: React.FC = () => {
         if (newData && newData.date === todayStr) {
           setTodayWorkout({ id: newData.id, ...newData } as WorkoutSession);
         }
-      })
-      .subscribe();
+      });
+
+    workoutChannel.subscribe();
 
     // Load recent conversations for persistent memory
     const fetchConversations = async () => {
@@ -161,8 +163,9 @@ export const Coach: React.FC = () => {
       .channel(`coach_conversations:${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'coach_conversations', filter: `user_id=eq.${user.id}` }, () => {
         fetchConversations();
-      })
-      .subscribe();
+      });
+
+    conversationsChannel.subscribe();
 
     return () => {
       supabase.removeChannel(metricsChannel);

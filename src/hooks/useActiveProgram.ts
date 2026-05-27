@@ -59,8 +59,9 @@ export const useActiveProgram = () => {
             }
           }
         }
-      )
-      .subscribe();
+      );
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);
