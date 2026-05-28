@@ -3,6 +3,7 @@ import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
 import { useSupabase } from '../components/SupabaseProvider';
 import { DailyWorkoutState } from '../types';
 import { format } from 'date-fns';
+import { toCamelCase } from '../lib/db';
 
 export const useDailyWorkout = (dateStr?: string) => {
   const { user } = useSupabase();
@@ -28,7 +29,7 @@ export const useDailyWorkout = (dateStr?: string) => {
           .maybeSingle();
 
         if (error) throw error;
-        setWorkoutState(data as DailyWorkoutState | null);
+        setWorkoutState(data ? toCamelCase(data) as DailyWorkoutState : null);
       } catch (error) {
         handleSupabaseError(error, OperationType.GET, 'daily_workout_states');
       } finally {
@@ -55,7 +56,7 @@ export const useDailyWorkout = (dateStr?: string) => {
             if (payload.eventType === 'DELETE') {
               setWorkoutState(null);
             } else {
-              setWorkoutState(newData as DailyWorkoutState);
+              setWorkoutState(toCamelCase(newData) as DailyWorkoutState);
             }
           }
         }

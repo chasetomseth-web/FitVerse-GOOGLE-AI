@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
 import { useSupabase } from '../components/SupabaseProvider';
 import { WorkoutSession } from '../types';
+import { toCamelCase } from '../lib/db';
 
 export const useWorkoutSession = (sessionId: string | undefined) => {
   const { user } = useSupabase();
@@ -25,7 +26,7 @@ export const useWorkoutSession = (sessionId: string | undefined) => {
           .maybeSingle();
 
         if (error) throw error;
-        setSession(data as WorkoutSession | null);
+        setSession(data ? toCamelCase(data) as WorkoutSession : null);
       } catch (error) {
         handleSupabaseError(error, OperationType.GET, 'workout_sessions');
       } finally {
@@ -50,7 +51,7 @@ export const useWorkoutSession = (sessionId: string | undefined) => {
           if (payload.eventType === 'DELETE') {
             setSession(null);
           } else {
-            setSession(payload.new as WorkoutSession);
+            setSession(toCamelCase(payload.new) as WorkoutSession);
           }
         }
       );

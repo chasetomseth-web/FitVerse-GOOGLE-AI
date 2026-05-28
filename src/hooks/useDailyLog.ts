@@ -3,6 +3,7 @@ import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
 import { useSupabase } from '../components/SupabaseProvider';
 import { DailyLog } from '../types';
 import { format } from 'date-fns';
+import { toCamelCase } from '../lib/db';
 
 export const useDailyLog = () => {
   const { user } = useSupabase();
@@ -28,7 +29,7 @@ export const useDailyLog = () => {
           .maybeSingle();
 
         if (error) throw error;
-        setLogState(data as DailyLog | null);
+        setLogState(data ? toCamelCase(data) as DailyLog : null);
       } catch (error) {
         handleSupabaseError(error, OperationType.GET, 'daily_logs');
       } finally {
@@ -55,7 +56,7 @@ export const useDailyLog = () => {
             if (payload.eventType === 'DELETE') {
               setLogState(null);
             } else {
-              setLogState(newData as DailyLog);
+              setLogState(toCamelCase(newData) as DailyLog);
             }
           }
         }

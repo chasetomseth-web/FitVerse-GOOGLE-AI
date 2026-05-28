@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
 import { useSupabase } from '../components/SupabaseProvider';
 import { UserProfile } from '../types';
+import { toCamelCase } from '../lib/db';
 
 export const useUserProfile = () => {
   const { user } = useSupabase();
@@ -24,7 +25,7 @@ export const useUserProfile = () => {
           .maybeSingle();
 
         if (error) throw error;
-        setProfile(data as UserProfile | null);
+        setProfile(data ? toCamelCase(data) as UserProfile : null);
       } catch (error) {
         handleSupabaseError(error, OperationType.GET, 'user_profiles');
       } finally {
@@ -49,7 +50,7 @@ export const useUserProfile = () => {
           if (payload.eventType === 'DELETE') {
             setProfile(null);
           } else {
-            setProfile(payload.new as UserProfile);
+            setProfile(toCamelCase(payload.new) as UserProfile);
           }
         }
       );

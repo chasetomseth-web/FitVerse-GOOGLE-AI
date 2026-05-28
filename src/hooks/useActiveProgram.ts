@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase, handleSupabaseError, OperationType } from '../lib/supabase';
 import { useSupabase } from '../components/SupabaseProvider';
 import { TrainingProgram } from '../types';
+import { toCamelCase } from '../lib/db';
 
 export const useActiveProgram = () => {
   const { user } = useSupabase();
@@ -26,7 +27,7 @@ export const useActiveProgram = () => {
           .maybeSingle();
 
         if (error) throw error;
-        setActiveProgram(data as TrainingProgram | null);
+        setActiveProgram(data ? toCamelCase(data) as TrainingProgram : null);
       } catch (error) {
         handleSupabaseError(error, OperationType.GET, 'training_programs');
       } finally {
@@ -51,7 +52,7 @@ export const useActiveProgram = () => {
           if (payload.eventType === 'DELETE') {
             setActiveProgram(null);
           } else {
-            const newData = payload.new as any;
+            const newData = toCamelCase(payload.new) as any;
             if (newData.status === 'active') {
               setActiveProgram(newData as TrainingProgram);
             } else {
