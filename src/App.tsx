@@ -23,6 +23,11 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   const { profile, loading: profileLoading } = useUserProfile();
   const location = useLocation();
 
+  // Debug logging
+  if (profile) {
+    console.log('ProtectedRoute - profile.onboardingComplete:', profile.onboardingComplete);
+  }
+
   if (!authReady || authLoading || (user && profileLoading)) {
     return (
       <div className="min-h-screen bg-brand-black flex items-center justify-center">

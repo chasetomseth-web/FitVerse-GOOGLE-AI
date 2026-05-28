@@ -275,10 +275,15 @@ export const Onboarding: React.FC = () => {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
 
+      console.log('Saving profile with onboarding_complete:', profileUpdates.onboarding_complete);
+
       if (updateProfile) {
         await updateProfile(profileUpdates);
+        console.log('Profile updated successfully');
       } else {
-        await supabase.from('user_profiles').update(profileUpdates).eq('id', user!.id);
+        const { error } = await supabase.from('user_profiles').update(profileUpdates).eq('id', user!.id);
+        if (error) throw error;
+        console.log('Profile updated via direct Supabase call');
       }
 
       // Save strength baselines to separate table
