@@ -68,18 +68,6 @@ export const Home: React.FC = () => {
     return eachDayOfInterval({ start, end });
   }, [currentCalendarMonth]);
 
-  // Show loading state if profile is not yet loaded
-  if (profileLoading || !profile) {
-    return (
-      <div className="min-h-screen bg-brand-black flex items-center justify-center">
-        <div className="text-white text-center">
-          <div className="w-16 h-16 border-4 border-brand-pink/20 border-t-brand-pink rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-sm font-bold uppercase tracking-widest">Loading your dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
   // Fetch workout states for the calendar month
   useEffect(() => {
     if (!user || !showSwapModal) return;

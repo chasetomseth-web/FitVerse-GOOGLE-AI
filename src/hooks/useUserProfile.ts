@@ -18,15 +18,24 @@ export const useUserProfile = () => {
 
     const fetchProfile = async () => {
       try {
+        console.log('Fetching profile for user:', user.id);
         const { data, error } = await supabase
           .from('user_profiles')
           .select('*')
           .eq('id', user.id)
           .maybeSingle();
 
-        if (error) throw error;
-        setProfile(data ? toCamelCase(data) as UserProfile : null);
+        if (error) {
+          console.error('Error fetching profile:', error);
+          throw error;
+        }
+
+        console.log('Profile data from DB:', data);
+        const convertedProfile = data ? toCamelCase(data) as UserProfile : null;
+        console.log('Converted profile:', convertedProfile);
+        setProfile(convertedProfile);
       } catch (error) {
+        console.error('Failed to fetch profile:', error);
         handleSupabaseError(error, OperationType.GET, 'user_profiles');
       } finally {
         setLoading(false);
