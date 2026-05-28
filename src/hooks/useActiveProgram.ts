@@ -37,36 +37,8 @@ export const useActiveProgram = () => {
 
     fetchProgram();
 
-    // Subscribe to changes
-    const channel = supabase
-      .channel(`active_program:${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'training_programs',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          if (payload.eventType === 'DELETE') {
-            setActiveProgram(null);
-          } else {
-            const newData = toCamelCase(payload.new) as any;
-            if (newData.status === 'active') {
-              setActiveProgram(newData as TrainingProgram);
-            } else {
-              setActiveProgram(null);
-            }
-          }
-        }
-      );
-
-    channel.subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // For now, skip realtime subscriptions to avoid errors
+    return () => {};
   }, [user]);
 
   const updateProgram = async (updates: Partial<TrainingProgram>) => {

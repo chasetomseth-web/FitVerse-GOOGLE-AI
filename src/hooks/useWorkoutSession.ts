@@ -36,31 +36,8 @@ export const useWorkoutSession = (sessionId: string | undefined) => {
 
     fetchSession();
 
-    // Subscribe to changes
-    const channel = supabase
-      .channel(`workout_session:${sessionId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'workout_sessions',
-          filter: `id=eq.${sessionId}`
-        },
-        (payload) => {
-          if (payload.eventType === 'DELETE') {
-            setSession(null);
-          } else {
-            setSession(toCamelCase(payload.new) as WorkoutSession);
-          }
-        }
-      );
-
-    channel.subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // For now, skip realtime subscriptions to avoid errors
+    return () => {};
   }, [sessionId, user]);
 
   const updateSession = async (updates: Partial<WorkoutSession>) => {

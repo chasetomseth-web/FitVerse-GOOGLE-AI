@@ -42,7 +42,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     return <Navigate to="/onboarding" />;
   }
 
-  if (profile && !profile.onboarding_complete && !isOnboardingPage) {
+  if (profile && !profile.onboardingComplete && !isOnboardingPage) {
     return <Navigate to="/onboarding" />;
   }
 

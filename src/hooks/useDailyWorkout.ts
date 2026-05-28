@@ -39,34 +39,8 @@ export const useDailyWorkout = (dateStr?: string) => {
 
     fetchWorkout();
 
-    // Subscribe to changes
-    const channel = supabase
-      .channel(`daily_workout:${user.id}:${targetDate}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'daily_workout_states',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          const newData = payload.new as any;
-          if (newData && newData.date === targetDate) {
-            if (payload.eventType === 'DELETE') {
-              setWorkoutState(null);
-            } else {
-              setWorkoutState(toCamelCase(newData) as DailyWorkoutState);
-            }
-          }
-        }
-      );
-
-    channel.subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // For now, skip realtime subscriptions to avoid errors
+    return () => {};
   }, [user, targetDate]);
 
   return { workoutState, loading };

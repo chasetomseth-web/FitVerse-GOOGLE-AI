@@ -35,31 +35,9 @@ export const useUserProfile = () => {
 
     fetchProfile();
 
-    // Subscribe to changes
-    const channel = supabase
-      .channel(`user_profile:${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_profiles',
-          filter: `id=eq.${user.id}`
-        },
-        (payload) => {
-          if (payload.eventType === 'DELETE') {
-            setProfile(null);
-          } else {
-            setProfile(toCamelCase(payload.new) as UserProfile);
-          }
-        }
-      );
-
-    channel.subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // For now, skip realtime subscriptions to avoid errors
+    // Realtime needs to be enabled in Supabase dashboard
+    return () => {};
   }, [user]);
 
   const updateProfile = async (updates: Partial<UserProfile>) => {

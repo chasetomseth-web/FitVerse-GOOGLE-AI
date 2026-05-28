@@ -39,34 +39,8 @@ export const useDailyLog = () => {
 
     fetchLog();
 
-    // Subscribe to changes
-    const channel = supabase
-      .channel(`daily_log:${user.id}:${todayStr}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'daily_logs',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          const newData = payload.new as any;
-          if (newData && newData.date === todayStr) {
-            if (payload.eventType === 'DELETE') {
-              setLogState(null);
-            } else {
-              setLogState(toCamelCase(newData) as DailyLog);
-            }
-          }
-        }
-      );
-
-    channel.subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    // For now, skip realtime subscriptions to avoid errors
+    return () => {};
   }, [user, todayStr]);
 
   const setLog = async (updates: Partial<DailyLog>) => {
