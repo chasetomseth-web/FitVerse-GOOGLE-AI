@@ -129,34 +129,32 @@ export const Onboarding: React.FC = () => {
   const handleNext = async () => {
     // Save current step's progress to profile so it's remembered if they refresh
     if (updateProfile) {
-      const heightCm = formData.unitSystem === 'imperial' 
+      const heightCm = formData.unitSystem === 'imperial'
         ? Math.round((formData.heightFt * 30.48) + (formData.heightIn * 2.54))
         : Math.round(formData.heightCm);
-      const weightKg = formData.unitSystem === 'imperial' 
+      const weightKg = formData.unitSystem === 'imperial'
         ? Math.round(formData.weightLbs * 0.453592)
         : Math.round(formData.weightKg);
 
-      await updateProfile({
-        name: `${formData.firstName} ${formData.lastName}`.trim() || profile?.name || 'Athlete',
-        birthDate,
-        unitSystem: formData.unitSystem,
-        gender: formData.gender,
-        heightCm,
-        weightKg,
-        fitnessLevel: formData.fitnessLevel,
-        primaryGoal: formData.primaryGoal,
-        selectedGoals: formData.selectedGoals,
-        trainingEnvironment: formData.trainingEnvironment,
-        availableEquipment: formData.availableEquipment,
-        preferredWorkoutDuration: formData.preferredWorkoutDuration,
-        strengthBaselines: {
-          benchPress: formData.strengthBaselines.bench,
-          squat: formData.strengthBaselines.squat,
-          deadlift: formData.strengthBaselines.deadlift,
-          overheadPress: formData.strengthBaselines.ohp,
-          barbellRow: formData.strengthBaselines.row
-        }
-      });
+      try {
+        await updateProfile({
+          name: `${formData.firstName} ${formData.lastName}`.trim() || profile?.name || 'Athlete',
+          birthDate,
+          unitSystem: formData.unitSystem,
+          gender: formData.gender,
+          heightCm,
+          weightKg,
+          fitnessLevel: formData.fitnessLevel,
+          primaryGoal: formData.primaryGoal,
+          selectedGoals: formData.selectedGoals,
+          trainingEnvironment: formData.trainingEnvironment,
+          availableEquipment: formData.availableEquipment,
+          preferredWorkoutDuration: formData.preferredWorkoutDuration,
+        });
+      } catch (err) {
+        console.error('Failed to save profile step:', err);
+        // Continue anyway - don't block navigation
+      }
     }
 
     if (step < 5) setStep(step + 1);
@@ -253,15 +251,9 @@ export const Onboarding: React.FC = () => {
     };
 
     // 1. Save Profile
-    if (updateProfile) {
-      await updateProfile(finalProfile);
-    } else {
-      // Convert to snake_case for Supabase
-      const snakeCaseProfile: any = {
-        id: user!.id,
+    try {
+      const profileUpdates: any = {
         name: finalProfile.name,
-        email: finalProfile.email,
-        photo_url: finalProfile.photoURL,
         birth_date: finalProfile.birthDate,
         age: finalProfile.age,
         unit_system: finalProfile.unitSystem,
@@ -276,25 +268,33 @@ export const Onboarding: React.FC = () => {
         preferred_workout_duration: finalProfile.preferredWorkoutDuration,
         training_environment: finalProfile.trainingEnvironment,
         available_equipment: finalProfile.availableEquipment,
-        injury_log: finalProfile.injuryLog,
         medical_notes: finalProfile.medicalNotes,
         limitations: finalProfile.limitations,
         onboarding_complete: true,
         last_active_at: new Date().toISOString(),
-        created_at: profile?.createdAt || new Date().toISOString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        strength_baselines: {
-          bench_press: finalProfile.strengthBaselines?.benchPress,
-          squat: finalProfile.strengthBaselines?.squat,
-          deadlift: finalProfile.strengthBaselines?.deadlift,
-          overhead_press: finalProfile.strengthBaselines?.overheadPress,
-          barbell_row: finalProfile.strengthBaselines?.row
-        },
-        coach_notes: '',
-        known_intolerances: [],
-        meal_preferences: []
       };
-      await supabase.from('user_profiles').upsert(snakeCaseProfile);
+
+      if (updateProfile) {
+        await updateProfile(profileUpdates);
+      } else {
+        await supabase.from('user_profiles').update(profileUpdates).eq('id', user!.id);
+      }
+
+      // Save strength baselines to separate table
+      if (finalProfile.strengthBaselines) {
+        await supabase.from('strength_baselines').upsert({
+          user_id: user!.id,
+          bench_press: finalProfile.strengthBaselines.benchPress || 0,
+          squat: finalProfile.strengthBaselines.squat || 0,
+          deadlift: finalProfile.strengthBaselines.deadlift || 0,
+          overhead_press: finalProfile.strengthBaselines.overheadPress || 0,
+          barbell_row: finalProfile.strengthBaselines.row || 0,
+        }, { onConflict: 'user_id' });
+      }
+    } catch (err) {
+      console.error('Error saving profile:', err);
+      // Continue anyway - don't block the user
     }
 
     // 2. Generate Program

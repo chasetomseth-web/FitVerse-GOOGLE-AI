@@ -54,12 +54,17 @@ export const useUserProfile = () => {
 
       if (Object.keys(cleanUpdates).length === 0) return;
 
+      console.log('Updating profile with:', cleanUpdates);
+
       const { error } = await supabase
         .from('user_profiles')
         .update(cleanUpdates)
         .eq('id', user.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase update error:', error);
+        throw error;
+      }
     } catch (error) {
       handleSupabaseError(error, OperationType.UPDATE, 'user_profiles');
     }

@@ -37,8 +37,30 @@ export interface SupabaseErrorInfo {
 }
 
 export function handleSupabaseError(error: unknown, operationType: OperationType, table: string | null) {
+  let errorMessage = 'Unknown error';
+
+  if (error instanceof Error) {
+    errorMessage = error.message;
+  } else if (typeof error === 'object' && error !== null) {
+    // Handle Supabase error objects
+    const supabaseError = error as any;
+    if (supabaseError.message) {
+      errorMessage = supabaseError.message;
+      if (supabaseError.details) {
+        errorMessage += ` - ${supabaseError.details}`;
+      }
+      if (supabaseError.hint) {
+        errorMessage += ` (Hint: ${supabaseError.hint})`;
+      }
+    } else {
+      errorMessage = JSON.stringify(error);
+    }
+  } else {
+    errorMessage = String(error);
+  }
+
   const errInfo: SupabaseErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: errorMessage,
     authInfo: {
       userId: undefined,
       email: undefined,
@@ -49,6 +71,7 @@ export function handleSupabaseError(error: unknown, operationType: OperationType
     table
   };
 
-  console.error('Supabase Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  console.error('Supabase Error:', errInfo);
+  console.error('Raw error:', error);
+  throw new Error(errorMessage);
 }
